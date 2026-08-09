@@ -106,6 +106,18 @@ describe('monthly totals', () => {
     assert.equal(monthLabel('2026-07'), 'Jul 26');
   });
 
+  it("each month's categories add up to its net, which the pivot table relies on", () => {
+    // The property page shows categories as columns and months as rows; the
+    // Net column and the footer only reconcile if this holds.
+    for (const month of monthlyTotals(shares)) {
+      const fromCategories = [...month.byCategory.values()].reduce(
+        (sum, v) => Math.round(sum * 100 + v * 100) / 100,
+        0,
+      );
+      assert.equal(fromCategories, month.net, `${month.label} categories should total its net`);
+    }
+  });
+
   it('accumulates a running balance', () => {
     const running = runningTotals(monthlyTotals(shares));
     assert.equal(running[0].balance, 721.94);

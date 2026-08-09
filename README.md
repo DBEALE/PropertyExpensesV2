@@ -87,6 +87,13 @@ days, and recurring payments that haven't arrived. Overdue items are listed firs
 and labelled with how late they are ("Gas Safety Certificate — due 24/07/2026, 14 days ago"), because
 "this lapsed three weeks ago" is a different kind of fact from "insurance renews in September".
 
+**Monthly breakdown** — the Summary tab's matrix pivoted for this property: categories across the
+top, one row per month, with a Net column and a totals row. Every month between the first and last
+transaction is listed, **including empty ones** — a month where the rent never arrived is only
+obvious if the blank row is actually on screen. Categories this property never uses are left out
+rather than trailing an empty column down the page, and columns sort like everywhere else, so
+clicking *Repairs* ranks the months by what they cost.
+
 **Recurring payments** — the same detection that drives the Accounts tab, scoped to this property:
 typical amount, which day of the month it usually lands, when it last arrived, when the next is
 expected. Anything overdue is flagged on its own row as well as in the banner. This is display-only

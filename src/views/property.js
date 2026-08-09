@@ -3,10 +3,12 @@
  * tenancy — each kept as a dated record, with everything it replaced still
  * readable underneath.
  */
-import { accountSummary, isOverdue, paymentStreams, sharesFor } from '../accounts.js';
+import { accountSummary, isOverdue, monthlyTotals, paymentStreams, sharesFor } from '../accounts.js';
+import { sumAllocations } from '../allocation.js';
 import { complianceStatus, upcomingCompliance } from '../compliance.js';
 import { addMonths } from '../dates.js';
-import { el, entityTag, money, toast, ukDate } from '../dom.js';
+import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
+import { sortRows, toggleSort } from '../sort.js';
 import { slotClass } from '../palette.js';
 import {
   SECTIONS,
@@ -26,6 +28,8 @@ import {
 
 /** Which section is open for editing, so a re-render doesn't close it. */
 let editing = null;
+/** Oldest month first, so a year of figures reads chronologically. */
+const matrixSort = { key: 'month', dir: 'asc' };
 
 export function renderProperty(root, rerender, propertyId) {
   const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
@@ -79,6 +83,7 @@ export function renderProperty(root, rerender, propertyId) {
     today,
   });
 
+  renderMonthlyBreakdown(root, sharesFor(transactions, propertyId), getState().categories, rerender);
   renderRecurring(root, streams, today);
   renderCompliance(root, property, complianceTypes, complianceCompletions, today, rerender);
 
@@ -153,6 +158,106 @@ function renderComingUp(root, { dated, compliance, lateStreams, today }) {
 function daysBetween(from, to) {
   const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
   return Math.max(0, Math.round(ms / 86400000));
+}
+
+/**
+ * The Summary tab's matrix, pivoted for one property: categories across the
+ * top, one row per month. Answers "what did this property cost me in March,
+ * and on what" without leaving the property page.
+ *
+ * Every month between the first and last transaction appears, including ones
+ * with nothing in them — a gap in the rent is only visible if the empty month
+ * is actually on screen.
+ */
+function renderMonthlyBreakdown(root, shares, categories, rerender) {
+  const months = monthlyTotals(shares);
+
+  root.append(el('h3', {}, 'Monthly breakdown'));
+
+  if (months.length === 0) {
+    root.append(
+      el(
+        'div',
+        { class: 'empty' },
+        'Nothing categorised against this property yet. ',
+        el('a', { href: '#/transactions' }, 'Review transactions'),
+      ),
+    );
+    return;
+  }
+
+  // Only show categories this property actually uses — a landlord with no
+  // management fees doesn't need an empty column following them down the page.
+  const used = categories.filter((c) => months.some((m) => (m.byCategory.get(c.id) ?? 0) !== 0));
+  const columns = used.length > 0 ? used : categories;
+
+  const cell = (month, categoryId) => month.byCategory.get(categoryId) ?? 0;
+  const columnTotal = (categoryId) => sumAllocations(months.map((m) => ({ amount: cell(m, categoryId) })));
+  const grandTotal = sumAllocations(months.map((m) => ({ amount: m.net })));
+
+  const accessors = { month: (m) => m.month, net: (m) => m.net };
+  for (const c of columns) accessors[`cat:${c.id}`] = (m) => cell(m, c.id);
+  const rows = sortRows(months, matrixSort, accessors);
+
+  const onSort = (key) => {
+    toggleSort(matrixSort, key, key === 'month' ? 'asc' : 'desc');
+    rerender();
+  };
+  const mTh = (label, key, options) => sortableTh(label, key, matrixSort, onSort, options);
+
+  root.append(
+    el(
+      'table',
+      { class: 'data summary' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          mTh('Month', 'month'),
+          ...columns.map((c) =>
+            sortableTh(c.name, `cat:${c.id}`, matrixSort, onSort, {
+              class: 'num',
+              title: c.description || `Sort by ${c.name}`,
+            }),
+          ),
+          mTh('Net', 'net', { class: 'num' }),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...rows.map((month) =>
+          el(
+            'tr',
+            {},
+            el('td', {}, month.label),
+            ...columns.map((c) => {
+              const value = cell(month, c.id);
+              return el(
+                'td',
+                { class: `num ${value < 0 ? 'out' : value > 0 ? 'in' : 'zero'}` },
+                value === 0 ? '—' : money(value),
+              );
+            }),
+            el('td', { class: `num strong ${month.net < 0 ? 'out' : 'in'}` }, money(month.net)),
+          ),
+        ),
+      ),
+      el(
+        'tfoot',
+        {},
+        el(
+          'tr',
+          {},
+          el('th', {}, `${months.length} month(s)`),
+          ...columns.map((c) => el('th', { class: 'num' }, money(columnTotal(c.id)))),
+          el('th', { class: 'num strong' }, money(grandTotal)),
+        ),
+      ),
+    ),
+  );
 }
 
 /**
