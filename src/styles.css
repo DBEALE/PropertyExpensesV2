@@ -67,7 +67,15 @@ body {
   background: var(--bg);
 }
 
+/*
+ * The page heading and tabs stay put while the list scrolls under them, and
+ * table headings stick directly beneath. --header-h is measured in main.js,
+ * because the header's height changes when the tabs wrap onto two rows.
+ */
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   padding: 16px 20px 0;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
@@ -253,11 +261,13 @@ label.inline small {
 
 table.data {
   width: 100%;
-  border-collapse: collapse;
+  /* `separate` keeps each sticky heading's own background and bottom border
+     painted; with `collapse` the shared border scrolls away with the body. */
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  overflow: hidden;
   font-size: 14px;
 }
 
@@ -270,16 +280,66 @@ table.data td {
 }
 
 table.data thead th {
+  position: sticky;
+  top: var(--header-h, 0px);
+  z-index: 2;
   background: var(--bg);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--muted);
+  /* Its own border, since a sticky cell leaves the collapsed one behind. */
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* A sortable heading is a button so it is reachable by keyboard. */
+th.sortable {
+  padding: 0;
+}
+
+.sort-button {
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+th.num .sort-button {
+  text-align: right;
+}
+
+.sort-button:hover {
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.sort-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+th.sorted .sort-button {
+  color: var(--accent);
+}
+
+.sort-arrow {
+  font-size: 10px;
 }
 
 table.data tfoot th {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   background: var(--bg);
   font-weight: 700;
+  box-shadow: inset 0 1px 0 var(--line);
 }
 
 table.data .num {
@@ -1018,5 +1078,12 @@ tr.row-split td {
   table.data {
     display: block;
     overflow-x: auto;
+  }
+
+  /* The table becomes its own scroll container here, which a sticky heading
+     would anchor to instead of the page — so it stays put on narrow screens. */
+  table.data thead th,
+  table.data tfoot th {
+    position: static;
   }
 }

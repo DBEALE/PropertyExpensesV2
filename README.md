@@ -226,6 +226,27 @@ reference varies between statements but the property name doesn't.
 Finishing a manual assignment **asks** whether you want a rule rather than opening the editor
 uninvited — most hand edits are one-offs. Answer yes and the pre-filled editor opens.
 
+### Working through a long list
+
+The page heading and tabs stay pinned to the top as you scroll, and table headings stick directly
+beneath them, so you never lose track of which column is which. Summary totals stay pinned to the
+bottom of their table. (On narrow screens the table scrolls sideways in its own box, which would
+anchor a sticky heading to the box rather than the page, so headings sit still there instead.)
+
+**Click any column heading to sort by it; click it again to reverse.** The active column is marked
+with an arrow and announced to screen readers. Blank cells always sort to the bottom whichever way
+the column points — an empty cell is missing information, not the smallest value — and rows that tie
+keep their existing order.
+
+Sorting applies to the rows currently on screen, so it stacks with the filters rather than fighting
+them. Two details worth knowing:
+
+- On the **Rules** table the `#` column is the rule's position in *evaluation* order, worked out
+  before any sorting — re-sorting the table never misstates which rule fires first.
+- On the **Summary**, sorting by a category column ranks properties by what they earned or spent
+  under it. The "Not a property" line stays pinned to the bottom, since it is a footnote rather than
+  one of the ranked rows.
+
 ### Getting between screens
 
 - The **By rule** badge on a transaction opens the Rules tab scrolled to the rule that categorised
@@ -361,6 +382,7 @@ src/
   accounts.js         monthly totals and recurring-payment detection
   property-details.js dated property records, LTV, upcoming dates
   focus.js            "take me to that row" hand-off between screens
+  sort.js             click-to-sort column state and comparators
   charts.js           small SVG chart builders (columns, legend, table view)
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB

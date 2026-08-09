@@ -1,6 +1,8 @@
 import { hasSplit } from '../allocation.js';
-import { el, entityTag, money, toast } from '../dom.js';
+import { el, entityTag, money, sortableTh, toast } from '../dom.js';
+import { sortRows, toggleSort } from '../sort.js';
 import {
+  amountRange,
   countMatches,
   describeAmount,
   hasAmount,
@@ -20,6 +22,9 @@ import {
 } from '../store.js';
 import { highlight, takeFocus } from '../focus.js';
 import { openRuleEditor } from './rule-editor.js';
+
+/** Default order is the order rules actually fire in. */
+const sort = { key: 'position', dir: 'asc' };
 
 export function renderRules(root, rerender) {
   const { rules, properties, transactions } = getState();
@@ -86,6 +91,27 @@ export function renderRules(root, rerender) {
     return;
   }
 
+  // The number is the rule's position in evaluation order, worked out before
+  // any display sort — so re-sorting the table never misstates which rule
+  // fires first.
+  const ranked = orderRules(rules).map((rule, i) => ({ rule, position: i + 1 }));
+
+  const rows = sortRows(ranked, sort, {
+    position: (r) => r.position,
+    details: (r) => (hasText(r.rule) ? r.rule.matchText : ''),
+    type: (r) => (hasType(r.rule) ? r.rule.transactionTypeEquals : ''),
+    amount: (r) => (hasAmount(r.rule) ? amountRange(r.rule).min : null),
+    property: (r) => (hasSplit(r.rule) ? 'Split' : propertyName(r.rule.propertyId)),
+    category: (r) => (hasSplit(r.rule) ? 'Split' : categoryName(r.rule.category)),
+    matches: (r) => counts.get(r.rule.id) ?? 0,
+  });
+
+  const onSort = (key) => {
+    toggleSort(sort, key, key === 'matches' || key === 'amount' ? 'desc' : 'asc');
+    rerender();
+  };
+  const th = (label, key, options) => sortableTh(label, key, sort, onSort, options);
+
   root.append(
     el(
       'table',
@@ -96,24 +122,24 @@ export function renderRules(root, rerender) {
         el(
           'tr',
           {},
-          el('th', {}, '#'),
-          el('th', {}, 'Details'),
-          el('th', {}, 'Type'),
-          el('th', { class: 'num' }, 'Amount'),
-          el('th', {}, 'Property'),
-          el('th', {}, 'Category'),
-          el('th', { class: 'num' }, 'Matches'),
+          th('#', 'position', { title: 'Sort by evaluation order' }),
+          th('Details', 'details'),
+          th('Type', 'type'),
+          th('Amount', 'amount', { class: 'num' }),
+          th('Property', 'property'),
+          th('Category', 'category'),
+          th('Matches', 'matches', { class: 'num' }),
           el('th', {}, ''),
         ),
       ),
       el(
         'tbody',
         {},
-        ...orderRules(rules).map((rule, i) =>
+        ...rows.map(({ rule, position }) =>
           el(
             'tr',
             { 'data-rule': rule.id },
-            el('td', { class: 'num muted' }, String(i + 1)),
+            el('td', { class: 'num muted' }, String(position)),
             el(
               'td',
               { class: 'details' },

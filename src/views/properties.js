@@ -1,7 +1,8 @@
 import { categoryIdFor } from '../categories.js';
 import { newId } from '../db.js';
 import { SLOTS, nextSlot, slotOf } from '../palette.js';
-import { el, entityTag, swatch, toast } from '../dom.js';
+import { el, entityTag, sortableTh, swatch, toast } from '../dom.js';
+import { sortRows, toggleSort } from '../sort.js';
 import {
   categoryUsage,
   deleteCategory,
@@ -36,8 +37,28 @@ function colourPicker(record, onPick) {
   );
 }
 
+const propertySort = { key: 'name', dir: 'asc' };
+const categorySort = { key: null, dir: 'asc' };
+
 export function renderProperties(root, rerender) {
   const { properties, rules, transactions } = getState();
+
+  // Counts are wanted both for display and for sorting, so work them out once.
+  const rows = properties.map((property) => ({
+    property,
+    rules: rules.filter((r) => r.propertyId === property.id).length,
+    transactions: transactions.filter((t) => t.propertyId === property.id).length,
+  }));
+  const sorted = sortRows(rows, propertySort, {
+    name: (r) => r.property.name,
+    rules: (r) => r.rules,
+    transactions: (r) => r.transactions,
+  });
+  const pTh = (label, key, options) =>
+    sortableTh(label, key, propertySort, (k) => {
+      toggleSort(propertySort, k, k === 'name' ? 'asc' : 'desc');
+      rerender();
+    }, options);
 
   const nameInput = el('input', { type: 'text', placeholder: 'e.g. 3 Peterborough Gate', required: true });
 
@@ -79,19 +100,17 @@ export function renderProperties(root, rerender) {
           el(
             'tr',
             {},
-            el('th', {}, 'Name'),
+            pTh('Name', 'name'),
             el('th', {}, 'Colour'),
-            el('th', { class: 'num' }, 'Rules'),
-            el('th', { class: 'num' }, 'Transactions'),
+            pTh('Rules', 'rules', { class: 'num' }),
+            pTh('Transactions', 'transactions', { class: 'num' }),
             el('th', {}, ''),
           ),
         ),
         el(
           'tbody',
           {},
-          ...properties.map((property) => {
-            const ruleCount = rules.filter((r) => r.propertyId === property.id).length;
-            const txCount = transactions.filter((t) => t.propertyId === property.id).length;
+          ...sorted.map(({ property, rules: ruleCount, transactions: txCount }) => {
             return el(
               'tr',
               {},
@@ -159,6 +178,19 @@ export function renderProperties(root, rerender) {
 function renderCategories(root, rerender) {
   const { categories } = getState();
 
+  const rows = categories.map((category) => ({ category, usage: categoryUsage(category.id) }));
+  const sorted = sortRows(rows, categorySort, {
+    name: (r) => r.category.name,
+    description: (r) => r.category.description ?? '',
+    rules: (r) => r.usage.rules,
+    transactions: (r) => r.usage.transactions,
+  });
+  const cTh = (label, key, options) =>
+    sortableTh(label, key, categorySort, (k) => {
+      toggleSort(categorySort, k, k === 'rules' || k === 'transactions' ? 'desc' : 'asc');
+      rerender();
+    }, options);
+
   const nameInput = el('input', { type: 'text', placeholder: 'e.g. Ground rent', required: true });
   const descriptionInput = el('input', {
     type: 'text',
@@ -211,19 +243,18 @@ function renderCategories(root, rerender) {
         el(
           'tr',
           {},
-          el('th', {}, 'Name'),
-          el('th', {}, 'Description'),
+          cTh('Name', 'name'),
+          cTh('Description', 'description'),
           el('th', {}, 'Colour'),
-          el('th', { class: 'num' }, 'Rules'),
-          el('th', { class: 'num' }, 'Transactions'),
+          cTh('Rules', 'rules', { class: 'num' }),
+          cTh('Transactions', 'transactions', { class: 'num' }),
           el('th', {}, ''),
         ),
       ),
       el(
         'tbody',
         {},
-        ...categories.map((category) => {
-          const usage = categoryUsage(category.id);
+        ...sorted.map(({ category, usage }) => {
           const name = el('input', { type: 'text', value: category.name, 'aria-label': 'Category name' });
           const description = el('input', {
             type: 'text',

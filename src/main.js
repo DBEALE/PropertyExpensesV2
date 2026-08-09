@@ -70,6 +70,24 @@ function render() {
   renderNav(route);
   clear(view);
   route.render(view, route.id === 'import' ? navigate : render, route.param);
+  measureHeader();
+}
+
+/**
+ * Table headings stick directly under the page heading, so they need its
+ * height — which changes when the tab row wraps on a narrow window.
+ */
+function measureHeader() {
+  const header = document.querySelector('.app-header');
+  if (!header) return;
+  document.documentElement.style.setProperty('--header-h', `${Math.round(header.offsetHeight)}px`);
+}
+
+if (typeof ResizeObserver === 'function') {
+  const header = document.querySelector('.app-header');
+  if (header) new ResizeObserver(measureHeader).observe(header);
+} else {
+  window.addEventListener('resize', measureHeader);
 }
 
 window.addEventListener('hashchange', render);

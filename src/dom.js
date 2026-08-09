@@ -1,3 +1,5 @@
+import { ariaSort, sortIndicator } from './sort.js';
+
 /**
  * Tiny element builder. Text children are always set as text nodes, never
  * HTML, so statement contents can't inject markup.
@@ -47,6 +49,37 @@ export function entityTag(name, slotClass, description) {
     { class: `entity ${slotClass}`, title: description || name },
     el('span', { class: 'swatch', 'aria-hidden': 'true' }),
     name,
+  );
+}
+
+/**
+ * A clickable column heading. Click to sort by it, click again to reverse.
+ *
+ * @param {string} label
+ * @param {string} key column key, matching an accessor
+ * @param {import('./sort.js').SortState} state
+ * @param {(key: string) => void} onSort
+ * @param {{class?: string, initial?: 'asc'|'desc', title?: string}} [options]
+ */
+export function sortableTh(label, key, state, onSort, options = {}) {
+  const active = state.key === key;
+  return el(
+    'th',
+    {
+      class: `${options.class ?? ''} sortable${active ? ' sorted' : ''}`.trim(),
+      'aria-sort': ariaSort(state, key),
+    },
+    el(
+      'button',
+      {
+        type: 'button',
+        class: 'sort-button',
+        title: options.title ?? `Sort by ${label}`,
+        onclick: () => onSort(key),
+      },
+      label,
+      el('span', { class: 'sort-arrow', 'aria-hidden': 'true' }, sortIndicator(state, key)),
+    ),
   );
 }
 

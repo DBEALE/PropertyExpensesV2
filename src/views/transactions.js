@@ -1,6 +1,7 @@
 import { hasSplit, isAssigned } from '../allocation.js';
 import { toCsv } from '../csv.js';
-import { download, el, entityTag, money, swatch, toast, ukDate } from '../dom.js';
+import { download, el, entityTag, money, sortableTh, swatch, toast, ukDate } from '../dom.js';
+import { sortRows, toggleSort } from '../sort.js';
 import { filterByDate } from '../dates.js';
 import { describeRule } from '../rules.js';
 import {
@@ -17,8 +18,16 @@ import { isKnownCategory, isNonProperty, selectableProperties } from '../categor
 import { highlight, setFocus, takeFocus } from '../focus.js';
 import { openRuleEditor } from './rule-editor.js';
 
-/** Filter state lives outside render so it survives re-renders. */
+/** Filter and sort state live outside render so they survive re-renders. */
 const filters = { text: '', status: 'all', from: '', to: '' };
+/** Newest first by default, matching how a statement reads. */
+const sort = { key: 'date', dir: 'desc' };
+
+/** The word shown in the Status column — also what that column sorts on. */
+function statusLabel(transaction) {
+  if (transaction.matchedRuleId) return 'By rule';
+  return isAssigned(transaction) ? 'Manual' : 'Needs review';
+}
 
 export function renderTransactions(root, rerender) {
   const { transactions, categories, rules } = getState();
@@ -125,6 +134,24 @@ export function renderTransactions(root, rerender) {
     return;
   }
 
+  // Sorting is applied after filtering, so the column you clicked orders
+  // exactly the rows on screen.
+  visible = sortRows(visible, sort, {
+    date: (t) => t.date,
+    details: (t) => t.details,
+    type: (t) => t.transactionType,
+    amount: (t) => t.amount,
+    property: (t) => (hasSplit(t) ? 'Split' : propertyName(t.propertyId)),
+    category: (t) => (hasSplit(t) ? 'Split' : categoryName(t.category)),
+    status: (t) => statusLabel(t),
+  });
+
+  const onSort = (key) => {
+    toggleSort(sort, key, key === 'date' || key === 'amount' ? 'desc' : 'asc');
+    rerender();
+  };
+  const th = (label, key, options) => sortableTh(label, key, sort, onSort, options);
+
   root.append(
     el(
       'table',
@@ -135,13 +162,13 @@ export function renderTransactions(root, rerender) {
         el(
           'tr',
           {},
-          el('th', {}, 'Date'),
-          el('th', {}, 'Details'),
-          el('th', {}, 'Type'),
-          el('th', { class: 'num' }, 'Amount'),
-          el('th', {}, 'Property'),
-          el('th', {}, 'Category'),
-          el('th', {}, 'Status'),
+          th('Date', 'date'),
+          th('Details', 'details'),
+          th('Type', 'type'),
+          th('Amount', 'amount', { class: 'num' }),
+          th('Property', 'property'),
+          th('Category', 'category'),
+          th('Status', 'status'),
           el('th', {}, ''),
         ),
       ),

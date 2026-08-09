@@ -1,12 +1,14 @@
 import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
 import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
-import { download, el, entityTag, money, toast } from '../dom.js';
+import { download, el, entityTag, money, sortableTh, toast } from '../dom.js';
+import { sortRows, toggleSort } from '../sort.js';
 import { getState } from '../store.js';
 import { slotClass } from '../palette.js';
 
 /** Range state lives outside render so it survives re-renders. */
 const range = { from: '', to: '' };
+const sort = { key: 'name', dir: 'asc' };
 
 export function renderSummary(root, rerender) {
   const { transactions, properties, categories } = getState();
@@ -109,6 +111,26 @@ export function renderSummary(root, rerender) {
 
   const grandTotal = sum(propertyShares);
 
+  // Sorting by a category column ranks properties by what they earned or spent
+  // under it. "Not a property" is pinned to the bottom either way, since it is
+  // a footnote to the table rather than one of its rows.
+  const accessors = { name: (p) => p.name, net: (p) => rowTotal(p.id) };
+  for (const c of categories) accessors[`cat:${c.id}`] = (p) => cellTotal(p.id, c.id);
+  const ranked = sortRows(
+    propertyRows.filter((p) => !isNonProperty(p.id)),
+    sort,
+    accessors,
+  );
+  const sortedRows = hasNonProperty
+    ? [...ranked, propertyRows.find((p) => isNonProperty(p.id))]
+    : ranked;
+
+  const onSort = (key) => {
+    toggleSort(sort, key, key === 'name' ? 'asc' : 'desc');
+    rerender();
+  };
+  const sTh = (label, key, options) => sortableTh(label, key, sort, onSort, options);
+
   root.append(
     el(
       'table',
@@ -119,15 +141,23 @@ export function renderSummary(root, rerender) {
         el(
           'tr',
           {},
-          el('th', {}, 'Property'),
-          ...categories.map((c) => el('th', { class: 'num', title: c.description }, entityTag(c.name, slotClass(c), c.description))),
-          el('th', { class: 'num' }, 'Net'),
+          sTh('Property', 'name'),
+          ...categories.map((c) =>
+            sortableTh(
+              c.name,
+              `cat:${c.id}`,
+              sort,
+              onSort,
+              { class: 'num', title: c.description || `Sort by ${c.name}` },
+            ),
+          ),
+          sTh('Net', 'net', { class: 'num' }),
         ),
       ),
       el(
         'tbody',
         {},
-        ...propertyRows.map((property) =>
+        ...sortedRows.map((property) =>
           el(
             'tr',
             { class: isNonProperty(property.id) ? 'row-non-property' : '' },
@@ -173,7 +203,7 @@ export function renderSummary(root, rerender) {
             const quote = (s) => `"${s.replace(/"/g, '""')}"`;
             const lines = [
               ['Property', ...categories.map((c) => c.name), 'Net'].join(','),
-              ...propertyRows.map((p) =>
+              ...sortedRows.map((p) =>
                 [
                   quote(p.name),
                   ...categories.map((c) => (isNonProperty(p.id) ? '' : cellTotal(p.id, c.id).toFixed(2))),
