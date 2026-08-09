@@ -749,21 +749,9 @@ tr.row-duplicate {
   margin-left: 8px;
 }
 
-.oneoffs {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0;
-  font-size: 13px;
-}
-
-.oneoffs li {
-  padding: 4px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.oneoffs .num {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+/* The read-only copy of the table on the Accounts screen. */
+table.data.read-only tbody tr:hover {
+  background: var(--bg);
 }
 
 /* --- property detail ----------------------------------------------------- */
@@ -878,15 +866,6 @@ tr.row-duplicate {
 
 .badge-link:hover {
   background: var(--bg);
-}
-
-.oneoff-link {
-  text-decoration: none;
-  padding: 0;
-}
-
-.oneoff-link:hover {
-  text-decoration: underline;
 }
 
 /* Marks a row jumped to from another screen; fades out on its own. */

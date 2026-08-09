@@ -13,8 +13,8 @@ third-party service.
 
 - **Import** — upload (or drag in) a bank statement CSV, with a preview before anything is saved.
   Rows already imported from an overlapping statement are flagged and skipped by default.
-- **Review table** — editable Property and Category per row, filterable by text, date and status
-  (auto-categorised by rule vs. needs manual review).
+- **Review table** — editable Property and Category per row, filterable by text, property, category,
+  date and status (auto-categorised by rule vs. needs manual review), sortable on every column.
 - **Rule engine** — rules match on any combination of Details text, Transaction Type and exact
   amount, and auto-fill Property and Category on import.
 - **One-click rules from a transaction** — click **Rule** on any row to open an editor pre-filled
@@ -156,8 +156,14 @@ a month apart. For each one it shows:
 - a warning when nothing has arrived since the expected date — the rent that hasn't come in.
 
 Expected dates are inferred from your imported statements, not fetched from the bank: they are an
-estimate, and the view says so. One-off payments are listed separately rather than being given a
-bogus schedule.
+estimate, and the view says so. One-off payments get no forecast rather than a bogus schedule.
+
+**Transactions** — the same table as the Transactions screen, read-only, already narrowed to whatever
+this screen is showing. The property and date range follow the selection at the top, so there is one
+obvious place to change them; only the **category** filter is repeated here, since narrowing to
+"Repairs" for the property you are already looking at is the common question. Columns sort the same
+way, and the **By rule** badge still jumps to the rule. To change an assignment, use the Transactions
+screen — the link is right there.
 
 ## Money that isn't property income
 
@@ -225,6 +231,16 @@ reference varies between statements but the property name doesn't.
 
 Finishing a manual assignment **asks** whether you want a rule rather than opening the editor
 uninvited — most hand edits are one-offs. Answer yes and the pre-filled editor opens.
+
+### Filtering
+
+The Transactions screen filters on text, **property**, **category**, status and a date range, all at
+once. **Clear filters** appears as soon as anything is narrowed.
+
+A split transaction belongs to every property and category it was split across, so filtering by
+either one keeps it — and filtering by a property *and* a category together shows only the rows
+holding that exact pair. "Unassigned" finds rows with no assignment at all, while "Uncategorised"
+also catches non-property rows, which are classified but carry no category.
 
 ### Working through a long list
 
@@ -383,6 +399,8 @@ src/
   property-details.js dated property records, LTV, upcoming dates
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
+  transaction-filter.js  the filter predicates both screens share
+  views/transaction-table.js  the table itself, editable or read-only
   charts.js           small SVG chart builders (columns, legend, table view)
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB

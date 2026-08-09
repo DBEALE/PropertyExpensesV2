@@ -13,12 +13,15 @@ import { NON_PROPERTY_ID, NON_PROPERTY_NAME } from '../categories.js';
 import { capSeries, chartTable, legend, stackedColumns } from '../charts.js';
 import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
 import { el, entityTag, money, ukDate } from '../dom.js';
-import { setFocus } from '../focus.js';
+import { toggleSort } from '../sort.js';
+import { ANY, filterTransactions } from '../transaction-filter.js';
+import { categoryFilter, transactionTable } from './transaction-table.js';
 import { slotClass } from '../palette.js';
 import { categoryName, getState } from '../store.js';
 
 /** Selection survives re-renders. */
-const view = { propertyId: 'all', from: '', to: '' };
+const view = { propertyId: 'all', from: '', to: '', category: 'all' };
+const sort = { key: 'date', dir: 'desc' };
 
 export function renderAccounts(root, rerender) {
   const { transactions, properties, categories } = getState();
@@ -120,6 +123,70 @@ export function renderAccounts(root, rerender) {
   renderTiles(root, shares);
   renderCashflow(root, shares, selected, properties, categories);
   renderSchedule(root, shares);
+  renderTransactionList(root, rerender, inRange);
+}
+
+/**
+ * The same transactions table as the Transactions screen, read-only, already
+ * narrowed to whatever this screen is showing. Only the category filter is
+ * offered here — property and dates come from the selection at the top, so
+ * there is one obvious place to change them.
+ */
+function renderTransactionList(root, rerender, inRange) {
+  const filters = {
+    propertyId: view.propertyId === 'all' ? ANY : view.propertyId,
+    category: view.category,
+  };
+  const visible = filterTransactions(inRange, filters);
+
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Transactions'),
+      el('span', { class: 'count' }, `${visible.length} shown`),
+      categoryFilter(view.category, (value) => {
+        view.category = value;
+        rerender();
+      }),
+      view.category !== ANY
+        ? el(
+            'button',
+            {
+              onclick: () => {
+                view.category = ANY;
+                rerender();
+              },
+            },
+            'All categories',
+          )
+        : null,
+    ),
+    el(
+      'p',
+      { class: 'hint' },
+      'Read-only here — the property and dates follow the selection at the top of this screen. ' +
+        'To edit an assignment, open the ',
+      el('a', { href: '#/transactions' }, 'Transactions'),
+      ' screen.',
+    ),
+  );
+
+  if (visible.length === 0) {
+    root.append(el('div', { class: 'empty' }, 'No transactions match this selection.'));
+    return;
+  }
+
+  root.append(
+    transactionTable(visible, {
+      readOnly: true,
+      sort,
+      onSort: (key) => {
+        toggleSort(sort, key, key === 'date' || key === 'amount' ? 'desc' : 'asc');
+        rerender();
+      },
+    }),
+  );
 }
 
 /** Headline figures. Income, expenses, and the net they produce. */
@@ -215,7 +282,6 @@ function renderSchedule(root, shares) {
   const today = new Date().toISOString().slice(0, 10);
   const streams = paymentStreams(shares, today);
   const recurring = streams.filter((s) => s.recurring);
-  const oneOffs = streams.filter((s) => !s.recurring);
 
   root.append(
     el('h3', {}, 'Recurring payments'),
@@ -291,38 +357,6 @@ function renderSchedule(root, shares) {
     );
   }
 
-  if (oneOffs.length > 0) {
-    root.append(
-      el('h3', {}, 'One-offs'),
-      el(
-        'ul',
-        { class: 'oneoffs' },
-        ...oneOffs.slice(0, 12).map((stream) =>
-          el(
-            'li',
-            {},
-            el(
-              'button',
-              {
-                class: 'link oneoff-link',
-                title: 'Show this on the Transactions screen',
-                onclick: () => {
-                  setFocus('transactions', stream.transactionId);
-                  window.location.hash = '#/transactions';
-                },
-              },
-              el('span', { class: `num ${stream.total < 0 ? 'out' : 'in'}` }, money(stream.total)),
-              ` · ${stream.label}`,
-            ),
-            ' · ',
-            categoryTag(stream.category),
-            ` · ${ukDate(stream.lastDate)}`,
-          ),
-        ),
-        oneOffs.length > 12 ? el('li', { class: 'hint' }, `…and ${oneOffs.length - 12} more.`) : null,
-      ),
-    );
-  }
 }
 
 function categoryTag(categoryId) {

@@ -1,39 +1,28 @@
-import { hasSplit, isAssigned } from '../allocation.js';
+import { isAssigned } from '../allocation.js';
+import { isNonProperty } from '../categories.js';
 import { toCsv } from '../csv.js';
-import { download, el, entityTag, money, sortableTh, swatch, toast, ukDate } from '../dom.js';
-import { sortRows, toggleSort } from '../sort.js';
-import { filterByDate } from '../dates.js';
-import { describeRule } from '../rules.js';
+import { download, el, toast } from '../dom.js';
+import { highlight, setFocus, takeFocus } from '../focus.js';
+import { toggleSort } from '../sort.js';
+import { ANY, filterTransactions, isFiltered } from '../transaction-filter.js';
 import {
   categoryName,
-  categorySlot,
   deleteTransaction,
   getState,
   propertyName,
-  propertySlot,
   reapplyRules,
   updateTransaction,
 } from '../store.js';
-import { isKnownCategory, isNonProperty, selectableProperties } from '../categories.js';
-import { highlight, setFocus, takeFocus } from '../focus.js';
 import { openRuleEditor } from './rule-editor.js';
+import { categoryFilter, propertyFilter, transactionTable } from './transaction-table.js';
 
 /** Filter and sort state live outside render so they survive re-renders. */
-const filters = { text: '', status: 'all', from: '', to: '' };
+const filters = { text: '', status: 'all', from: '', to: '', propertyId: ANY, category: ANY };
 /** Newest first by default, matching how a statement reads. */
 const sort = { key: 'date', dir: 'desc' };
 
-/** The word shown in the Status column — also what that column sorts on. */
-function statusLabel(transaction) {
-  if (transaction.matchedRuleId) return 'By rule';
-  return isAssigned(transaction) ? 'Manual' : 'Needs review';
-}
-
 export function renderTransactions(root, rerender) {
-  const { transactions, categories, rules } = getState();
-  // "Not a property" sits alongside the real ones, so personal spending can be
-  // classified rather than left looking uncategorised.
-  const properties = selectableProperties(getState().properties);
+  const { transactions } = getState();
 
   if (getState().properties.length === 0) {
     root.append(
@@ -47,15 +36,7 @@ export function renderTransactions(root, rerender) {
     );
   }
 
-  let visible = filterByDate(transactions, filters.from, filters.to);
-  if (filters.text) {
-    const needle = filters.text.toLowerCase();
-    visible = visible.filter((t) => t.details.toLowerCase().includes(needle));
-  }
-  if (filters.status === 'review') visible = visible.filter((t) => !isAssigned(t));
-  if (filters.status === 'auto') visible = visible.filter((t) => t.matchedRuleId !== null);
-  if (filters.status === 'split') visible = visible.filter((t) => hasSplit(t));
-
+  const visible = filterTransactions(transactions, filters);
   const needsReview = transactions.filter((t) => !isAssigned(t)).length;
 
   const search = el('input', {
@@ -108,9 +89,20 @@ export function renderTransactions(root, rerender) {
       el('h2', {}, 'Transactions'),
       el('span', { class: 'count' }, `${visible.length} shown · ${needsReview} need review`),
       search,
+      propertyFilter(filters.propertyId, (value) => {
+        filters.propertyId = value;
+        rerender();
+      }),
+      categoryFilter(filters.category, (value) => {
+        filters.category = value;
+        rerender();
+      }),
       statusSelect,
       el('label', { class: 'inline' }, 'From ', dateInput('from')),
       el('label', { class: 'inline' }, 'To ', dateInput('to')),
+      isFiltered(filters)
+        ? el('button', { onclick: () => clearFilters(rerender) }, 'Clear filters')
+        : null,
       el(
         'button',
         {
@@ -134,46 +126,25 @@ export function renderTransactions(root, rerender) {
     return;
   }
 
-  // Sorting is applied after filtering, so the column you clicked orders
-  // exactly the rows on screen.
-  visible = sortRows(visible, sort, {
-    date: (t) => t.date,
-    details: (t) => t.details,
-    type: (t) => t.transactionType,
-    amount: (t) => t.amount,
-    property: (t) => (hasSplit(t) ? 'Split' : propertyName(t.propertyId)),
-    category: (t) => (hasSplit(t) ? 'Split' : categoryName(t.category)),
-    status: (t) => statusLabel(t),
-  });
-
-  const onSort = (key) => {
-    toggleSort(sort, key, key === 'date' || key === 'amount' ? 'desc' : 'asc');
-    rerender();
-  };
-  const th = (label, key, options) => sortableTh(label, key, sort, onSort, options);
+  if (visible.length === 0) {
+    root.append(el('div', { class: 'empty' }, 'No transactions match these filters.'));
+    return;
+  }
 
   root.append(
-    el(
-      'table',
-      { class: 'data' },
-      el(
-        'thead',
-        {},
-        el(
-          'tr',
-          {},
-          th('Date', 'date'),
-          th('Details', 'details'),
-          th('Type', 'type'),
-          th('Amount', 'amount', { class: 'num' }),
-          th('Property', 'property'),
-          th('Category', 'category'),
-          th('Status', 'status'),
-          el('th', {}, ''),
-        ),
-      ),
-      el('tbody', {}, ...visible.map((t) => row(t))),
-    ),
+    transactionTable(visible, {
+      sort,
+      onSort: (key) => {
+        toggleSort(sort, key, key === 'date' || key === 'amount' ? 'desc' : 'asc');
+        rerender();
+      },
+      onAssign: (transaction, change) => void assign(transaction, change, rerender),
+      onCreateRule: (transaction) => createRuleFrom(transaction, rerender),
+      onDelete: (transaction) => {
+        if (!confirm('Delete this transaction?')) return;
+        void deleteTransaction(transaction.id).then(rerender);
+      },
+    }),
   );
 
   // Arriving from another screen ("show me that transaction"): make sure the
@@ -181,219 +152,52 @@ export function renderTransactions(root, rerender) {
   const target = takeFocus('transactions');
   if (target) {
     const found = visible.some((t) => t.id === target);
-    if (!found && (filters.text || filters.status !== 'all' || filters.from || filters.to)) {
+    if (!found && isFiltered(filters)) {
       toast('Filters cleared to show that transaction.');
-      filters.text = '';
-      filters.status = 'all';
-      filters.from = '';
-      filters.to = '';
       setFocus('transactions', target);
-      rerender();
+      clearFilters(rerender);
       return;
     }
     highlight(root.querySelector(`[data-transaction="${target}"]`));
   }
+}
 
-  function row(transaction) {
-    const assigned = isAssigned(transaction);
+function clearFilters(rerender) {
+  filters.text = '';
+  filters.status = 'all';
+  filters.from = '';
+  filters.to = '';
+  filters.propertyId = ANY;
+  filters.category = ANY;
+  rerender();
+}
 
-    // A split transaction shows its shares instead of the two dropdowns —
-    // editing it means editing the rule that split it.
-    if (hasSplit(transaction)) return splitRow(transaction);
+function createRuleFrom(transaction, rerender) {
+  openRuleEditor({
+    transaction,
+    onSaved: () => void reapplyRules().then(rerender),
+  });
+}
 
-    const propertySelect = el(
-      'select',
-      {
-        'aria-label': 'Property',
-        onchange: (event) => void assign(transaction, { propertyId: event.target.value || null }),
-      },
-      el('option', { value: '' }, '— unassigned —'),
-      ...properties.map((p) => el('option', { value: p.id, selected: p.id === transaction.propertyId }, p.name)),
+/** @param {object} change partial property/category assignment */
+async function assign(transaction, change, rerender) {
+  // A hand-edited row is no longer owned by whatever rule first claimed it,
+  // and a manual single assignment replaces any split it used to carry.
+  const { allocations, ...rest } = transaction;
+  const next = { ...rest, ...change, matchedRuleId: null };
+  await updateTransaction(next);
+  rerender();
+
+  // Non-property is complete the moment the property is set — there is no
+  // category to wait for.
+  const justClassified = isNonProperty(next.propertyId) && change.propertyId !== undefined;
+  const justCategorised =
+    next.propertyId !== null && next.category !== null && change.category !== undefined;
+  if (justClassified || justCategorised) {
+    const wanted = confirm(
+      `Assigned to ${propertyName(next.propertyId)}${next.category ? ` · ${categoryName(next.category)}` : ''}.\n\n` +
+        'Create a rule so future imports categorise this automatically?',
     );
-
-    const categorySelect = el(
-      'select',
-      {
-        'aria-label': 'Category',
-        onchange: (event) => {
-          const value = event.target.value;
-          void assign(transaction, { category: isKnownCategory(value, categories) ? value : null });
-        },
-      },
-      el('option', { value: '' }, '— unassigned —'),
-      ...categories.map((c) =>
-        el(
-          'option',
-          { value: c.id, selected: c.id === transaction.category, title: c.description },
-          c.name,
-        ),
-      ),
-    );
-
-    return el(
-      'tr',
-      { 'data-transaction': transaction.id },
-      el('td', {}, ukDate(transaction.date)),
-      el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
-      el('td', {}, transaction.transactionType),
-      el('td', { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` }, money(transaction.amount)),
-      el('td', { class: 'with-swatch' }, swatch(propertySlot(transaction.propertyId), propertyName(transaction.propertyId)), propertySelect),
-      el('td', { class: 'with-swatch' }, swatch(categorySlot(transaction.category), categoryName(transaction.category)), categorySelect),
-      el(
-        'td',
-        {},
-        transaction.matchedRuleId
-          ? el(
-              'button',
-              {
-                class: 'badge badge-ok badge-link',
-                title: `${ruleLabel(transaction.matchedRuleId)}\n\nClick to open this rule.`,
-                onclick: () => {
-                  setFocus('rules', transaction.matchedRuleId);
-                  window.location.hash = '#/rules';
-                },
-              },
-              'By rule',
-            )
-          : assigned
-            ? el('span', { class: 'badge badge-manual' }, 'Manual')
-            : el('span', { class: 'badge' }, 'Needs review'),
-      ),
-      el(
-        'td',
-        { class: 'actions' },
-        el(
-          'button',
-          {
-            class: 'link',
-            title: 'Create a rule from this transaction',
-            onclick: () => createRuleFrom(transaction),
-          },
-          'Rule',
-        ),
-        el(
-          'button',
-          {
-            class: 'link danger',
-            onclick: () => {
-              if (!confirm('Delete this transaction?')) return;
-              void deleteTransaction(transaction.id).then(rerender);
-            },
-          },
-          'Delete',
-        ),
-      ),
-    );
-  }
-
-  /** A transaction split across properties: one line per share. */
-  function splitRow(transaction) {
-    const shares = transaction.allocations;
-    const cell = (render) =>
-      el('td', {}, ...shares.map((share) => el('div', { class: 'share' }, render(share))));
-
-    return el(
-      'tr',
-      { class: 'row-split', 'data-transaction': transaction.id },
-      el('td', {}, ukDate(transaction.date)),
-      el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
-      el('td', {}, transaction.transactionType),
-      el(
-        'td',
-        { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` },
-        money(transaction.amount),
-        el('div', { class: 'share-amounts' }, ...shares.map((s) => el('div', { class: 'share' }, money(s.amount)))),
-      ),
-      cell((share) => entityTag(propertyName(share.propertyId), propertySlot(share.propertyId))),
-      cell((share) => entityTag(categoryName(share.category), categorySlot(share.category))),
-      el(
-        'td',
-        {},
-        el(
-          'span',
-          { class: 'badge badge-split', title: describeSplit(transaction) },
-          `Split ${shares.length}`,
-        ),
-      ),
-      el(
-        'td',
-        { class: 'actions' },
-        el(
-          'button',
-          {
-            class: 'link',
-            title: 'Edit the rule that splits this transaction',
-            onclick: () => {
-              const rule = rules.find((r) => r.id === transaction.matchedRuleId);
-              if (rule) {
-                openRuleEditor({ rule, onSaved: () => void reapplyRules().then(rerender) });
-              } else {
-                createRuleFrom(transaction);
-              }
-            },
-          },
-          'Rule',
-        ),
-        el(
-          'button',
-          {
-            class: 'link danger',
-            onclick: () => {
-              if (!confirm('Delete this transaction?')) return;
-              void deleteTransaction(transaction.id).then(rerender);
-            },
-          },
-          'Delete',
-        ),
-      ),
-    );
-  }
-
-  function describeSplit(transaction) {
-    return transaction.allocations
-      .map((s) => `${propertyName(s.propertyId)} · ${s.category} · ${money(s.amount)}`)
-      .join('\n');
-  }
-
-  function ruleLabel(ruleId) {
-    const rule = rules.find((r) => r.id === ruleId);
-    return rule ? describeRule(rule, money) : 'Rule no longer exists';
-  }
-
-  /**
-   * Opens the editor pre-filled from this row. An uncategorised row has no
-   * property or category to seed, so fall back to the first of each and let
-   * the user pick in the dialog.
-   */
-  function createRuleFrom(transaction) {
-    openRuleEditor({
-      transaction,
-      onSaved: () => void reapplyRules().then(rerender),
-    });
-  }
-
-  /** @param {Partial<import('../types.js').Transaction>} change */
-  async function assign(transaction, change) {
-    // A hand-edited row is no longer owned by whatever rule first claimed it,
-    // and a manual single assignment replaces any split it used to carry.
-    const { allocations, ...rest } = transaction;
-    const next = { ...rest, ...change, matchedRuleId: null };
-    await updateTransaction(next);
-    rerender();
-    // Once it is fully assigned, ask before opening the rule editor — most
-    // manual edits are one-offs, and the editor is a big interruption to
-    // dismiss every time.
-    // Non-property is complete the moment the property is set — there is no
-    // category to wait for.
-    const justClassified = isNonProperty(next.propertyId) && change.propertyId !== undefined;
-    const justCategorised =
-      next.propertyId !== null && next.category !== null && change.category !== undefined;
-    if (justClassified || justCategorised) {
-      const wanted = confirm(
-        `Assigned to ${propertyName(next.propertyId)}${next.category ? ` · ${categoryName(next.category)}` : ''}.\n\n` +
-          'Create a rule so future imports categorise this automatically?',
-      );
-      if (wanted) createRuleFrom(next);
-    }
+    if (wanted) createRuleFrom(next, rerender);
   }
 }
