@@ -535,6 +535,17 @@ tr.row-duplicate {
   color: var(--warn);
 }
 
+.range-sep {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.badge-range {
+  color: var(--muted);
+  border-color: var(--line);
+  white-space: nowrap;
+}
+
 .badge-split {
   color: var(--accent);
   border-color: var(--accent);

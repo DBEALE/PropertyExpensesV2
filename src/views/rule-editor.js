@@ -1,8 +1,8 @@
 import { hasSplit, splitEvenly, sumAllocations } from '../allocation.js';
 import { newId } from '../db.js';
 import { el, money, toast } from '../dom.js';
-import { draftRuleFromTransaction, draftToRule, validateDraft } from '../rule-draft.js';
-import { countMatches, hasAmount, hasText, hasType } from '../rules.js';
+import { draftRuleFromTransaction, draftToRule, jitterBounds, validateDraft } from '../rule-draft.js';
+import { amountRange, countMatches, hasAmount, hasText, hasType } from '../rules.js';
 import { getState, saveRule } from '../store.js';
 import { CATEGORIES } from '../types.js';
 
@@ -17,7 +17,8 @@ function draftFromRule(rule) {
     useType: hasType(rule),
     transactionTypeEquals: rule.transactionTypeEquals ?? '',
     useAmount: hasAmount(rule),
-    amountEquals: hasAmount(rule) ? rule.amountEquals : 0,
+    amountMin: hasAmount(rule) ? amountRange(rule).min : 0,
+    amountMax: hasAmount(rule) ? amountRange(rule).max : 0,
     propertyId: rule.propertyId,
     category: rule.category,
     collides: false,
@@ -101,12 +102,48 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
 
   // --- condition: amount ------------------------------------------------
   const useAmount = el('input', { type: 'checkbox', checked: draft.useAmount, onchange: sync });
-  const amountValue = el('input', {
+  const amountMin = el('input', {
     type: 'number',
     step: '0.01',
-    value: String(draft.amountEquals),
+    class: 'allocation-amount',
+    'aria-label': 'Minimum amount',
+    value: String(draft.amountMin),
     oninput: sync,
   });
+  const amountMax = el('input', {
+    type: 'number',
+    step: '0.01',
+    class: 'allocation-amount',
+    'aria-label': 'Maximum amount',
+    value: String(draft.amountMax),
+    oninput: sync,
+  });
+
+  /**
+   * The amount the jitter buttons widen around: the transaction this rule came
+   * from, or the midpoint of the current bounds when editing an existing rule.
+   */
+  const jitterBase =
+    transaction !== undefined
+      ? transaction.amount
+      : (Number(draft.amountMin) + Number(draft.amountMax)) / 2;
+
+  const jitterButton = (percent, label) =>
+    el(
+      'button',
+      {
+        type: 'button',
+        class: 'chip-button',
+        onclick: () => {
+          const { min, max } = jitterBounds(jitterBase, percent);
+          amountMin.value = String(min);
+          amountMax.value = String(max);
+          useAmount.checked = true;
+          sync();
+        },
+      },
+      label,
+    );
 
   // --- outcome ----------------------------------------------------------
   const property = el(
@@ -137,9 +174,14 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
   const allocationRows = el('div', { class: 'allocation-rows' });
   const remainder = el('p', { class: 'remainder' });
 
+  /** The total a split must reconcile to — a split is always an exact pin. */
+  function splitTotal() {
+    return Number(amountMin.value) || 0;
+  }
+
   /** Two rows splitting the pinned amount evenly, as a starting point. */
   function seedAllocations() {
-    const total = Number(amountValue.value) || 0;
+    const total = splitTotal();
     const halves = splitEvenly(total, 2);
     return halves.map((amount, i) => ({
       propertyId: properties[Math.min(i, properties.length - 1)].id,
@@ -237,7 +279,7 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
           {
             type: 'button',
             onclick: () => {
-              const even = splitEvenly(Number(amountValue.value) || 0, allocations.length);
+              const even = splitEvenly(splitTotal(), allocations.length);
               allocations = allocations.map((a, i) => ({ ...a, amount: even[i] }));
               renderAllocations();
               sync();
@@ -263,7 +305,8 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
       useType: useType.checked,
       transactionTypeEquals: typeValue.value,
       useAmount: useAmount.checked,
-      amountEquals: amountValue.value,
+      amountMin: amountMin.value,
+      amountMax: amountMax.value,
       propertyId: property.value,
       category: category.value,
       split: split.checked,
@@ -277,19 +320,24 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
     matchText.disabled = !current.useText;
     matchType.disabled = !current.useText;
     typeValue.disabled = !current.useType;
-    amountValue.disabled = !current.useAmount;
-    // A split needs a fixed total to reconcile against, so pin the amount.
-    if (current.split && !useAmount.checked) {
+    amountMin.disabled = !current.useAmount;
+    amountMax.disabled = !current.useAmount;
+    // A split needs one fixed total to reconcile against, so it pins the
+    // amount and collapses the range to a single value.
+    if (current.split) {
       useAmount.checked = true;
-      amountValue.disabled = false;
+      amountMin.disabled = false;
+      amountMax.disabled = true;
+      amountMax.value = amountMin.value;
       current.useAmount = true;
+      current.amountMax = current.amountMin;
     }
     useAmount.disabled = current.split;
     property.disabled = current.split;
     category.disabled = current.split;
 
     if (current.split) {
-      const total = Number(current.amountEquals) || 0;
+      const total = splitTotal();
       const allocated = sumAllocations(allocations);
       remainder.textContent = `Allocated ${money(allocated)} of ${money(total)}`;
       remainder.className = `remainder ${Math.round((total - allocated) * 100) === 0 ? 'ok' : 'off'}`;
@@ -366,9 +414,19 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
       el(
         'div',
         { class: 'condition' },
-        el('label', { class: 'inline' }, useAmount, ' Amount is'),
-        amountValue,
+        el('label', { class: 'inline' }, useAmount, ' Amount between'),
+        amountMin,
+        el('span', { class: 'range-sep' }, 'and'),
+        amountMax,
         el('small', {}, 'expenses are negative'),
+      ),
+      el(
+        'div',
+        { class: 'suggestions' },
+        el('span', { class: 'hint' }, 'Allow for jitter:'),
+        jitterButton(0, 'exact'),
+        jitterButton(5, '±5%'),
+        jitterButton(10, '±10%'),
       ),
       draft.collides
         ? el(

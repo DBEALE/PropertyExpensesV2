@@ -14,8 +14,40 @@ export function hasType(rule) {
   return typeof rule.transactionTypeEquals === 'string' && rule.transactionTypeEquals.trim() !== '';
 }
 
+/**
+ * The rule's amount condition as an inclusive signed range, or null when it
+ * sets none. Accepts the legacy `amountEquals` shape so rules and backups
+ * written before ranges existed keep matching exactly as they did.
+ *
+ * @returns {{min: number, max: number}|null}
+ */
+export function amountRange(rule) {
+  const isNumber = (n) => typeof n === 'number' && Number.isFinite(n);
+  if (isNumber(rule.amountMin) || isNumber(rule.amountMax)) {
+    // A half-open range is treated as unbounded on the missing side.
+    const min = isNumber(rule.amountMin) ? rule.amountMin : -Infinity;
+    const max = isNumber(rule.amountMax) ? rule.amountMax : Infinity;
+    return { min: Math.min(min, max), max: Math.max(min, max) };
+  }
+  if (isNumber(rule.amountEquals)) return { min: rule.amountEquals, max: rule.amountEquals };
+  return null;
+}
+
 export function hasAmount(rule) {
-  return rule.amountEquals !== undefined && rule.amountEquals !== null;
+  return amountRange(rule) !== null;
+}
+
+/** True when the amount condition pins a single value rather than a range. */
+export function isExactAmount(rule) {
+  const range = amountRange(rule);
+  return range !== null && Math.round(range.min * 100) === Math.round(range.max * 100);
+}
+
+/** Width of the amount range in pence; 0 for an exact pin, Infinity if unset. */
+export function amountWidth(rule) {
+  const range = amountRange(rule);
+  if (range === null) return Infinity;
+  return Math.round(range.max * 100) - Math.round(range.min * 100);
 }
 
 /** How many conditions a rule sets, and how tightly. Higher wins ties. */
@@ -53,9 +85,15 @@ export function matchesType(rule, transactionType) {
   return (transactionType ?? '').trim().toLowerCase() === rule.transactionTypeEquals.trim().toLowerCase();
 }
 
-/** Amounts are compared to the penny, so float drift can't miss an exact pin. */
+/**
+ * Amounts are compared to the penny, so float drift can't miss a bound, and
+ * the range is inclusive at both ends.
+ */
 export function matchesAmount(rule, amount) {
-  return Math.round(rule.amountEquals * 100) === Math.round(amount * 100);
+  const range = amountRange(rule);
+  if (range === null) return true;
+  const pence = Math.round(amount * 100);
+  return pence >= Math.round(range.min * 100) && pence <= Math.round(range.max * 100);
 }
 
 /**
@@ -99,7 +137,14 @@ export function findMatchingRule(transaction, rules) {
 export function orderRules(rules) {
   return rules
     .map((rule, index) => ({ rule, index }))
-    .sort((a, b) => specificity(b.rule) - specificity(a.rule) || a.index - b.index)
+    .sort(
+      (a, b) =>
+        specificity(b.rule) - specificity(a.rule) ||
+        // A tighter amount window is more specific than a looser one, so an
+        // exact pin still beats a ±10% range for the same payee.
+        amountWidth(a.rule) - amountWidth(b.rule) ||
+        a.index - b.index,
+    )
     .map((entry) => entry.rule);
 }
 
@@ -140,6 +185,16 @@ export function describeRule(rule, formatAmount = (n) => String(n)) {
   const parts = [];
   if (hasText(rule)) parts.push(`Details ${rule.matchType} "${rule.matchText}"`);
   if (hasType(rule)) parts.push(`Type is "${rule.transactionTypeEquals}"`);
-  if (hasAmount(rule)) parts.push(`Amount is ${formatAmount(rule.amountEquals)}`);
+  if (hasAmount(rule)) parts.push(`Amount is ${describeAmount(rule, formatAmount)}`);
   return parts.length > 0 ? parts.join(' and ') : 'No conditions set';
+}
+
+/** "-428.06" for an exact pin, "-470.87 to -385.25" for a range. */
+export function describeAmount(rule, formatAmount = (n) => String(n)) {
+  const range = amountRange(rule);
+  if (range === null) return 'any';
+  if (isExactAmount(rule)) return formatAmount(range.min);
+  if (range.min === -Infinity) return `up to ${formatAmount(range.max)}`;
+  if (range.max === Infinity) return `${formatAmount(range.min)} or more`;
+  return `${formatAmount(range.min)} to ${formatAmount(range.max)}`;
 }

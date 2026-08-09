@@ -53,7 +53,10 @@ export function draftRuleFromTransaction(transaction, rules = []) {
     useType: false,
     transactionTypeEquals: transaction.transactionType ?? '',
     useAmount: collides,
-    amountEquals: transaction.amount,
+    // Both bounds start at the transaction's own amount — an exact pin until
+    // the user widens it with the jitter buttons.
+    amountMin: transaction.amount,
+    amountMax: transaction.amount,
     propertyId: transaction.propertyId,
     category: transaction.category,
     /** Why the amount box starts ticked, shown as a hint in the form. */
@@ -70,6 +73,7 @@ export function draftRuleFromTransaction(transaction, rules = []) {
 export function draftToRule(draft, id) {
   const split = draft.split === true;
   const allocations = split ? normaliseAllocations(draft.allocations) : [];
+  const bounds = draft.useAmount ? orderedBounds(draft) : null;
   return {
     id,
     matchText: draft.useText ? draft.matchText.trim() : '',
@@ -79,9 +83,36 @@ export function draftToRule(draft, id) {
     propertyId: split ? allocations[0].propertyId : draft.propertyId,
     category: split ? allocations[0].category : draft.category,
     ...(draft.useType ? { transactionTypeEquals: draft.transactionTypeEquals.trim() } : {}),
-    ...(draft.useAmount ? { amountEquals: Math.round(Number(draft.amountEquals) * 100) / 100 } : {}),
+    ...(bounds ? { amountMin: bounds.min, amountMax: bounds.max } : {}),
     ...(split ? { allocations } : {}),
   };
+}
+
+/** Bounds as entered, rounded to the penny and put the right way round. */
+export function orderedBounds(draft) {
+  const a = round(draft.amountMin);
+  const b = round(draft.amountMax);
+  return { min: Math.min(a, b), max: Math.max(a, b) };
+}
+
+function round(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+/**
+ * Widens a single amount by a percentage either side, e.g. 10 gives -10% to
+ * +10%. Works on magnitude, so an expense of -100 widens to -110..-90 rather
+ * than flipping sign, and bounds land on whole pence.
+ *
+ * @param {number} amount
+ * @param {number} percent 0 for an exact pin
+ */
+export function jitterBounds(amount, percent) {
+  const value = Number(amount);
+  const margin = Math.abs(value) * (percent / 100);
+  const lower = round(value - margin);
+  const upper = round(value + margin);
+  return { min: Math.min(lower, upper), max: Math.max(lower, upper) };
 }
 
 /**
@@ -104,17 +135,29 @@ export function validateDraft(draft) {
     return 'Enter the transaction type to match, or untick Type.';
   }
   // Number('') is 0, so a blank box would otherwise pin the rule to £0.00.
-  if (draft.useAmount && (String(draft.amountEquals).trim() === '' || !Number.isFinite(Number(draft.amountEquals)))) {
-    return 'Enter the amount to match, or untick Amount.';
+  if (draft.useAmount) {
+    for (const bound of ['amountMin', 'amountMax']) {
+      if (String(draft[bound]).trim() === '' || !Number.isFinite(Number(draft[bound]))) {
+        return 'Enter both amount bounds, or untick Amount.';
+      }
+    }
+    const { min, max } = orderedBounds(draft);
+    if (Math.sign(min) !== Math.sign(max) && min !== 0 && max !== 0) {
+      return 'The amount range crosses zero, so it would match both income and expenses.';
+    }
   }
 
   if (draft.split === true) {
     // Fixed allocations can only reconcile against a known total, so a split
-    // rule has to be pinned to the amount it splits.
+    // rule has to be pinned to one amount rather than a range.
     if (!draft.useAmount) {
       return 'A split rule must be pinned to an exact amount, so the shares always add up.';
     }
-    return validateAllocations(draft.allocations, Number(draft.amountEquals));
+    const { min, max } = orderedBounds(draft);
+    if (Math.round(min * 100) !== Math.round(max * 100)) {
+      return 'A split needs an exact amount — set the min and max to the same value, or turn off Split.';
+    }
+    return validateAllocations(draft.allocations, min);
   }
 
   if (!draft.propertyId) return 'Choose a property.';

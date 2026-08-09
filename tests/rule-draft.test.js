@@ -75,7 +75,9 @@ describe('draftRuleFromTransaction', () => {
     assert.equal(draft.useType, false);
     assert.equal(draft.transactionTypeEquals, 'Inward Payment');
     assert.equal(draft.useAmount, false);
-    assert.equal(draft.amountEquals, 1150);
+    // Both bounds start at the transaction amount — an exact pin until widened.
+    assert.equal(draft.amountMin, 1150);
+    assert.equal(draft.amountMax, 1150);
     assert.equal(draft.propertyId, 'propA');
     assert.equal(draft.category, 'Rent');
   });
@@ -109,13 +111,29 @@ describe('draftToRule', () => {
     assert.equal('amountEquals' in built, false);
   });
 
-  it('keeps every ticked condition, rounding the amount to the penny', () => {
+  it('keeps every ticked condition, rounding the bounds to the penny', () => {
     const built = draftToRule(
-      { ...draftRuleFromTransaction(TENANT, []), useType: true, useAmount: true, amountEquals: '1150.005' },
+      {
+        ...draftRuleFromTransaction(TENANT, []),
+        useType: true,
+        useAmount: true,
+        amountMin: '1150.005',
+        amountMax: '1150.005',
+      },
       'r1',
     );
     assert.equal(built.transactionTypeEquals, 'Inward Payment');
-    assert.equal(built.amountEquals, 1150.01);
+    assert.equal(built.amountMin, 1150.01);
+    assert.equal(built.amountMax, 1150.01);
+  });
+
+  it('puts inverted bounds the right way round', () => {
+    const built = draftToRule(
+      { ...draftRuleFromTransaction(TENANT, []), useAmount: true, amountMin: 1200, amountMax: 1100 },
+      'r1',
+    );
+    assert.equal(built.amountMin, 1100);
+    assert.equal(built.amountMax, 1200);
   });
 
   it('produces a rule that matches the transaction it came from', () => {
@@ -150,11 +168,19 @@ describe('validateDraft', () => {
   it('refuses ticked-but-empty conditions', () => {
     assert.match(validateDraft({ ...base, matchText: '   ' }), /untick Details/i);
     assert.match(validateDraft({ ...base, useType: true, transactionTypeEquals: '' }), /untick Type/i);
-    assert.match(validateDraft({ ...base, useAmount: true, amountEquals: '' }), /untick Amount/i);
+    assert.match(validateDraft({ ...base, useAmount: true, amountMin: '' }), /untick Amount/i);
+    assert.match(validateDraft({ ...base, useAmount: true, amountMax: '' }), /untick Amount/i);
   });
 
   it('refuses an invalid regular expression', () => {
     assert.match(validateDraft({ ...base, matchType: 'regex', matchText: '([' }), /regular expression/i);
+  });
+
+  it('refuses a range that crosses zero, which would match income and expenses alike', () => {
+    assert.match(
+      validateDraft({ ...base, useAmount: true, amountMin: -50, amountMax: 50 }),
+      /crosses zero/i,
+    );
   });
 
   it('requires a property and a category', () => {

@@ -1,4 +1,5 @@
 import { toPence } from './allocation.js';
+import { amountRange } from './rules.js';
 import { isCategory, CATEGORIES } from './types.js';
 
 export class BackupFormatError extends Error {}
@@ -8,6 +9,16 @@ export class BackupFormatError extends Error {}
  * to the total they split. A backup that fails this would silently skew every
  * summary, so it is rejected rather than repaired.
  */
+/**
+ * The one amount a split rule reconciles against. A rule with an amount
+ * *range* has no single total, so a split on one is rejected as malformed.
+ */
+function exactAmountOf(rule) {
+  const range = amountRange(rule);
+  if (range === null) return undefined;
+  return toPence(range.min) === toPence(range.max) ? range.min : undefined;
+}
+
 function allocationsValid(allocations, total) {
   if (allocations === undefined || allocations === null) return true;
   if (!Array.isArray(allocations) || allocations.length === 0) return false;
@@ -66,7 +77,7 @@ export function validateBackup(raw) {
       typeof r.id === 'string' &&
       typeof r.matchText === 'string' &&
       isCategory(r.category) &&
-      allocationsValid(r.allocations, r.amountEquals),
+      allocationsValid(r.allocations, exactAmountOf(r)),
   );
   const transactions = data.transactions.filter(
     (t) =>

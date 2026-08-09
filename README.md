@@ -56,14 +56,35 @@ Date,Details,Transaction Type,In,Out,Balance
 
 A rule sets up to three conditions, in **any combination**, and assigns a property and a category:
 
-| Condition | Matches on                                       | Notes                                    |
-| --------- | ------------------------------------------------ | ---------------------------------------- |
-| Details   | the `Details` text                               | `contains` (default), `exact` or `regex` |
-| Type      | the `Transaction Type` column                    | exact, case-insensitive                  |
-| Amount    | the exact signed amount                          | to the penny; expenses are negative      |
+| Condition | Matches on                                       | Notes                                       |
+| --------- | ------------------------------------------------ | ------------------------------------------- |
+| Details   | the `Details` text                               | `contains` (default), `exact` or `regex`    |
+| Type      | the `Transaction Type` column                    | exact, case-insensitive                     |
+| Amount    | a signed **min–max range**, inclusive            | to the penny; expenses are negative         |
 
 A transaction must satisfy **every** condition the rule sets; unticked conditions are ignored. At
 least one condition is required — a rule with none would match everything, and is rejected.
+
+### Amount ranges and jitter
+
+The Amount condition is a range with both bounds inclusive. Building a rule from a transaction sets
+**both bounds to that transaction's amount** — an exact pin, matching only that figure. Three buttons
+widen it around the original amount:
+
+| Button | For a −£30.16 direct debit | Use when                                      |
+| ------ | -------------------------- | --------------------------------------------- |
+| exact  | −30.16 to −30.16           | the amount never varies (a fixed mortgage)     |
+| ±5%    | −31.67 to −28.65           | small drift — a rounding or index change       |
+| ±10%   | −33.18 to −27.14           | an annual premium that moves a little          |
+
+Bounds widen by magnitude, so an expense stays negative rather than flipping sign, and both ends land
+on whole pence. You can also type either bound directly; entering them the wrong way round is
+corrected on save. A range that crosses zero is rejected, since it would match income and expenses
+alike.
+
+A **tighter range is more specific**, so an exact pin still beats a ±10% range for the same payee,
+and a narrow range beats a wide one. That keeps the disambiguation behaviour below intact even when
+some rules are jittery.
 
 ### Creating a rule from a transaction
 
@@ -91,10 +112,10 @@ tried in the order they were created. The Rules page lists them in exactly this 
 That ordering lets a narrow rule win over a looser one for the same payee. For example, with a lender
 billing several properties under one name:
 
-| Details        | Type | Amount    | Property   | Category |
-| -------------- | ---- | --------- | ---------- | -------- |
-| `NATWEST BANK` | any  | `-428.06` | Property A | Interest |
-| `NATWEST BANK` | any  | `-512.40` | Property B | Interest |
+| Details        | Type | Amount                | Property   | Category |
+| -------------- | ---- | --------------------- | ---------- | -------- |
+| `NATWEST BANK` | any  | `-428.06` to `-428.06` | Property A | Interest |
+| `NATWEST BANK` | any  | `-512.40` to `-512.40` | Property B | Interest |
 
 A `NATWEST BANK` payment of £428.06 goes to Property A, £512.40 goes to Property B, and any other
 amount is left **unassigned for manual review** rather than being guessed at.
@@ -114,10 +135,11 @@ The editor will not let you save until the shares total the transaction exactly.
 **Allocated £x of £y** line shows where you are; **Split evenly** divides the total and gives any odd
 penny to the first row so the parts always reconcile.
 
-**A split rule must be pinned to an exact amount.** Shares are fixed pounds and pence, so the rule
-needs a known total to divide — ticking Split turns Amount on and locks it. If the same payee bills
-you a *different* amount next month, that transaction won't match, and lands in Needs review where
-you can build a second rule for it.
+**A split rule must be pinned to an exact amount** — not a range. Shares are fixed pounds and pence,
+so the rule needs one known total to divide. Ticking Split turns Amount on and collapses the range to
+a single value (the max box follows the min). If the same payee bills you a *different* amount next
+month, that transaction won't match, and lands in Needs review where you can build a second rule for
+it.
 
 Split transactions are shown in the Transactions table with a **Split** badge and one line per share
 (filter the status dropdown to **Split** to see them all). Editing one means editing the rule that

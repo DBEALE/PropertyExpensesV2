@@ -1,6 +1,14 @@
 import { hasSplit } from '../allocation.js';
 import { el, money, toast } from '../dom.js';
-import { countMatches, hasAmount, hasText, hasType, orderRules } from '../rules.js';
+import {
+  countMatches,
+  describeAmount,
+  hasAmount,
+  hasText,
+  hasType,
+  isExactAmount,
+  orderRules,
+} from '../rules.js';
 import { deleteRule, getState, propertyName, reapplyRules } from '../store.js';
 import { openRuleEditor } from './rule-editor.js';
 
@@ -109,7 +117,11 @@ export function renderRules(root, rerender) {
               'td',
               { class: 'num' },
               hasAmount(rule)
-                ? el('span', { class: 'badge badge-pin' }, money(rule.amountEquals))
+                ? el(
+                    'span',
+                    { class: `badge badge-pin ${isExactAmount(rule) ? '' : 'badge-range'}` },
+                    describeAmount(rule, money),
+                  )
                 : el('span', { class: 'unset' }, 'any'),
             ),
             hasSplit(rule)
@@ -162,7 +174,7 @@ function describe(rule) {
   const parts = [];
   if (hasText(rule)) parts.push(`Details ${rule.matchType} "${rule.matchText}"`);
   if (hasType(rule)) parts.push(`Type is "${rule.transactionTypeEquals}"`);
-  if (hasAmount(rule)) parts.push(`Amount is ${money(rule.amountEquals)}`);
+  if (hasAmount(rule)) parts.push(`Amount is ${describeAmount(rule, money)}`);
   if (hasSplit(rule)) parts.push(`Splits across ${rule.allocations.length} properties`);
   return parts.join('\n');
 }

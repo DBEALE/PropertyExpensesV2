@@ -16,15 +16,19 @@
  * @property {string} id
  * @property {string} matchText
  * @property {MatchType} matchType
- * @property {number} [amountEquals] Only matches transactions with this exact
- *   signed amount. Used to disambiguate a payee shared across properties.
+ * @property {number} [amountMin] Lower bound of the amount condition, signed
+ *   and inclusive. Equal to amountMax for an exact pin.
+ * @property {number} [amountMax] Upper bound, signed and inclusive.
+ * @property {number} [amountEquals] Legacy exact pin, still read from older
+ *   rules and backups. Treated as amountMin === amountMax === this value.
  * @property {string} [transactionTypeEquals] Only matches transactions with
  *   this Transaction Type (case-insensitive). Narrows a payee that appears as
  *   both, say, a Direct Debit and a Card Payment.
  * @property {string} propertyId Ignored when `allocations` is set.
  * @property {Category} category Ignored when `allocations` is set.
  * @property {Allocation[]} [allocations] Splits the transaction across
- *   properties. Requires `amountEquals`, and must sum to it exactly.
+ *   properties. Requires an exact amount (amountMin === amountMax), and must
+ *   sum to it exactly.
  *
  * @typedef {object} Transaction
  * @property {string} id
