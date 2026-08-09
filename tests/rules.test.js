@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { parseStatement } from '../src/csv.js';
-import { countMatches, findMatchingRule, matchesText, shouldSuggestAmountPin } from '../src/rules.js';
+import {
+  countMatches,
+  describeRule,
+  findMatchingRule,
+  matchesText,
+  shouldSuggestAmountPin,
+} from '../src/rules.js';
 import { FIXTURE, rule } from './fixtures.js';
 
 describe('matchesText', () => {
@@ -64,6 +70,90 @@ describe('findMatchingRule', () => {
   it('compares pinned amounts to the penny despite float representation', () => {
     const pinned = rule({ id: 'p', matchText: 'X', propertyId: 'a', amountEquals: 0.3 });
     assert.notEqual(findMatchingRule({ details: 'X', amount: 0.1 + 0.2 }, [pinned]), null);
+  });
+});
+
+describe('condition combinations', () => {
+  const tx = { details: 'NATWEST BANK', transactionType: 'Direct Debit', amount: -428.06 };
+
+  it('matches on transaction type alone', () => {
+    const r = rule({ id: 'a', matchText: '', propertyId: 'propA', transactionTypeEquals: 'Direct Debit' });
+    assert.equal(findMatchingRule(tx, [r]).id, 'a');
+    assert.equal(findMatchingRule({ ...tx, transactionType: 'Card Payment' }, [r]), null);
+  });
+
+  it('compares transaction type case-insensitively, ignoring surrounding space', () => {
+    const r = rule({ id: 'a', matchText: '', propertyId: 'propA', transactionTypeEquals: ' direct debit ' });
+    assert.equal(findMatchingRule(tx, [r]).id, 'a');
+  });
+
+  it('matches on amount alone', () => {
+    const r = rule({ id: 'a', matchText: '', propertyId: 'propA', amountEquals: -428.06 });
+    assert.equal(findMatchingRule(tx, [r]).id, 'a');
+    assert.equal(findMatchingRule({ ...tx, amount: -1 }, [r]), null);
+  });
+
+  it('requires every condition set to hold', () => {
+    const all = rule({
+      id: 'a',
+      matchText: 'NATWEST',
+      propertyId: 'propA',
+      transactionTypeEquals: 'Direct Debit',
+      amountEquals: -428.06,
+    });
+    assert.equal(findMatchingRule(tx, [all]).id, 'a');
+    // Each field in turn made wrong must break the match.
+    assert.equal(findMatchingRule({ ...tx, details: 'BARCLAYS' }, [all]), null);
+    assert.equal(findMatchingRule({ ...tx, transactionType: 'Card Payment' }, [all]), null);
+    assert.equal(findMatchingRule({ ...tx, amount: -1 }, [all]), null);
+  });
+
+  it('never matches a rule with no conditions at all', () => {
+    assert.equal(findMatchingRule(tx, [rule({ id: 'a', matchText: '', propertyId: 'propA' })]), null);
+  });
+
+  it('tries more specific rules first regardless of insertion order', () => {
+    const textOnly = rule({ id: 'text', matchText: 'NATWEST', propertyId: 'propA' });
+    const withType = rule({
+      id: 'type',
+      matchText: 'NATWEST',
+      propertyId: 'propB',
+      transactionTypeEquals: 'Direct Debit',
+    });
+    const withAmount = rule({ id: 'amount', matchText: 'NATWEST', propertyId: 'propC', amountEquals: -428.06 });
+
+    assert.equal(findMatchingRule(tx, [textOnly, withType, withAmount]).id, 'amount');
+    assert.equal(findMatchingRule(tx, [textOnly, withType]).id, 'type');
+    assert.equal(findMatchingRule(tx, [textOnly]).id, 'text');
+    // A transaction the specific rules don't cover still falls back to the loose one.
+    assert.equal(findMatchingRule({ ...tx, amount: -9, transactionType: 'Card Payment' }, [textOnly, withType, withAmount]).id, 'text');
+  });
+
+  it('orders equally specific rules by insertion order', () => {
+    const first = rule({ id: 'first', matchText: 'NATWEST', propertyId: 'propA' });
+    const second = rule({ id: 'second', matchText: 'BANK', propertyId: 'propB' });
+    assert.equal(findMatchingRule(tx, [first, second]).id, 'first');
+    assert.equal(findMatchingRule(tx, [second, first]).id, 'second');
+  });
+});
+
+describe('describeRule', () => {
+  it('spells out every condition a rule sets', () => {
+    const r = rule({
+      id: 'a',
+      matchText: 'NATWEST',
+      propertyId: 'propA',
+      transactionTypeEquals: 'Direct Debit',
+      amountEquals: -428.06,
+    });
+    assert.equal(
+      describeRule(r, (n) => n.toFixed(2)),
+      'Details contains "NATWEST" and Type is "Direct Debit" and Amount is -428.06',
+    );
+  });
+
+  it('reports a rule that sets nothing', () => {
+    assert.equal(describeRule(rule({ id: 'a', matchText: '', propertyId: 'propA' })), 'No conditions set');
   });
 });
 

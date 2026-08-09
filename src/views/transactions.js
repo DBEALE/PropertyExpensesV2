@@ -1,10 +1,10 @@
 import { toCsv } from '../csv.js';
-import { newId } from '../db.js';
 import { download, el, money, toast, ukDate } from '../dom.js';
 import { filterByDate } from '../dates.js';
-import { shouldSuggestAmountPin } from '../rules.js';
-import { deleteTransaction, getState, propertyName, saveRule, updateTransaction } from '../store.js';
+import { describeRule } from '../rules.js';
+import { deleteTransaction, getState, propertyName, reapplyRules, updateTransaction } from '../store.js';
 import { CATEGORIES, isCategory } from '../types.js';
+import { openRuleEditor } from './rule-editor.js';
 
 /** Filter state lives outside render so it survives re-renders. */
 const filters = { text: '', status: 'all', from: '', to: '' };
@@ -178,7 +178,16 @@ export function renderTransactions(root, rerender) {
       ),
       el(
         'td',
-        {},
+        { class: 'actions' },
+        el(
+          'button',
+          {
+            class: 'link',
+            title: 'Create a rule from this transaction',
+            onclick: () => createRuleFrom(transaction),
+          },
+          'Rule',
+        ),
         el(
           'button',
           {
@@ -196,10 +205,19 @@ export function renderTransactions(root, rerender) {
 
   function ruleLabel(ruleId) {
     const rule = rules.find((r) => r.id === ruleId);
-    if (!rule) return 'Rule no longer exists';
-    return rule.amountEquals === undefined
-      ? `Matched "${rule.matchText}"`
-      : `Matched "${rule.matchText}" at ${money(rule.amountEquals)}`;
+    return rule ? describeRule(rule, money) : 'Rule no longer exists';
+  }
+
+  /**
+   * Opens the editor pre-filled from this row. An uncategorised row has no
+   * property or category to seed, so fall back to the first of each and let
+   * the user pick in the dialog.
+   */
+  function createRuleFrom(transaction) {
+    openRuleEditor({
+      transaction,
+      onSaved: () => void reapplyRules().then(rerender),
+    });
   }
 
   /** @param {Partial<import('../types.js').Transaction>} change */
@@ -207,51 +225,11 @@ export function renderTransactions(root, rerender) {
     // A hand-edited row is no longer owned by whatever rule first claimed it.
     const next = { ...transaction, ...change, matchedRuleId: null };
     await updateTransaction(next);
-    if (next.propertyId !== null && next.category !== null) await offerRule(next);
     rerender();
+    // Once both fields are set, offer to remember it — non-blocking, and the
+    // dialog is pre-filled from this row so it's one click to accept.
+    if (next.propertyId !== null && next.category !== null && change.category !== undefined) {
+      createRuleFrom(next);
+    }
   }
-}
-
-/**
- * After a manual assignment, offers to remember it as a rule. Defaults to
- * pinning the amount when the same matchText is already used by another
- * property, since that is the signal the payee is shared.
- */
-async function offerRule(transaction) {
-  const { rules } = getState();
-  const matchText = prompt(
-    'Save this as a rule for future imports?\n\nText to match in Details (blank to skip):',
-    suggestMatchText(transaction.details),
-  );
-  if (matchText === null || matchText.trim() === '') return;
-
-  const pinByDefault = shouldSuggestAmountPin(matchText, transaction.propertyId, rules);
-  const pin = confirm(
-    pinByDefault
-      ? `"${matchText}" is already used by another property.\n\nPin this rule to the exact amount ` +
-          `${money(transaction.amount)} so the two don't collide?\n\nOK = pin the amount, Cancel = text-only rule.`
-      : `Pin this rule to the exact amount ${money(transaction.amount)}?\n\n` +
-          'OK = pin the amount, Cancel = text-only rule (recommended).',
-  );
-
-  await saveRule({
-    id: newId(),
-    matchText: matchText.trim(),
-    matchType: 'contains',
-    propertyId: transaction.propertyId,
-    category: transaction.category,
-    ...(pin ? { amountEquals: transaction.amount } : {}),
-  });
-  toast(`Rule saved: "${matchText.trim()}"${pin ? ` at ${money(transaction.amount)}` : ''}.`);
-}
-
-/**
- * Picks a sensible default match text: the longest word of 4+ characters,
- * which for "S Agyapong 3 PETERBOROUGH GAT" gives "PETERBOROUGH".
- * @param {string} details
- */
-export function suggestMatchText(details) {
-  const words = details.split(/\s+/).filter((w) => /[a-z]/i.test(w) && w.length >= 4);
-  if (words.length === 0) return details.trim();
-  return words.reduce((best, w) => (w.length > best.length ? w : best));
 }

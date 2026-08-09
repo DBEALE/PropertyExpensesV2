@@ -392,6 +392,113 @@ tr.row-duplicate {
   font-size: 13px;
 }
 
+/* --- rule editor dialog ------------------------------------------------ */
+
+.rule-dialog {
+  width: min(560px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.rule-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.rule-dialog h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.rule-source {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.condition > label.inline {
+  min-width: 110px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.condition input[type='text'] {
+  flex: 1;
+  min-width: 160px;
+}
+
+.condition input:disabled,
+.condition select:disabled {
+  opacity: 0.45;
+}
+
+.condition.outcome {
+  border-top: 2px solid var(--line);
+  margin-top: 4px;
+}
+
+.condition.outcome > span {
+  min-width: 110px;
+  font-weight: 500;
+}
+
+.rule-preview {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.rule-problem:not(:empty) {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.hint.warn {
+  color: var(--warn);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.match-type {
+  padding: 0 5px;
+  margin-right: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.unset,
+.muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.muted {
+  font-style: normal;
+}
+
 .toast {
   position: fixed;
   left: 50%;

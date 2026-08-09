@@ -1,4 +1,31 @@
 /**
+ * A rule carries up to three independent conditions — text against `Details`,
+ * an exact Transaction Type, and an exact signed amount. Any combination is
+ * allowed; a transaction must satisfy *every* condition the rule sets. A rule
+ * with no conditions at all would match everything, so it never matches.
+ */
+
+/** True when a rule constrains the given field. */
+export function hasText(rule) {
+  return typeof rule.matchText === 'string' && rule.matchText.trim() !== '';
+}
+
+export function hasType(rule) {
+  return typeof rule.transactionTypeEquals === 'string' && rule.transactionTypeEquals.trim() !== '';
+}
+
+export function hasAmount(rule) {
+  return rule.amountEquals !== undefined && rule.amountEquals !== null;
+}
+
+/** How many conditions a rule sets, and how tightly. Higher wins ties. */
+export function specificity(rule) {
+  // Amount is weighted above the others so an amount-pinned rule always beats
+  // a looser rule for the same payee, which is the disambiguation contract.
+  return (hasAmount(rule) ? 4 : 0) + (hasType(rule) ? 2 : 0) + (hasText(rule) ? 1 : 0);
+}
+
+/**
  * Tests a rule's text pattern against a transaction's Details field.
  * @param {import('./types.js').Rule} rule
  * @param {string} details
@@ -21,41 +48,65 @@ export function matchesText(rule, details) {
   }
 }
 
+/** Transaction Type is free text from the bank, so compare it leniently. */
+export function matchesType(rule, transactionType) {
+  return (transactionType ?? '').trim().toLowerCase() === rule.transactionTypeEquals.trim().toLowerCase();
+}
+
 /** Amounts are compared to the penny, so float drift can't miss an exact pin. */
-function amountMatches(rule, amount) {
-  if (rule.amountEquals === undefined) return true;
+export function matchesAmount(rule, amount) {
   return Math.round(rule.amountEquals * 100) === Math.round(amount * 100);
+}
+
+/**
+ * True when a transaction satisfies every condition the rule sets.
+ * @param {import('./types.js').Rule} rule
+ * @param {{details?: string, transactionType?: string, amount?: number}} transaction
+ */
+export function matchesRule(rule, transaction) {
+  if (specificity(rule) === 0) return false;
+  if (hasText(rule) && !matchesText(rule, transaction.details)) return false;
+  if (hasType(rule) && !matchesType(rule, transaction.transactionType)) return false;
+  if (hasAmount(rule) && !matchesAmount(rule, transaction.amount)) return false;
+  return true;
 }
 
 /**
  * Finds the rule that categorizes a transaction, or null.
  *
- * Amount-pinned rules are evaluated first so that a rule pinned to an exact
- * amount (e.g. NATWEST BANK + £428.06 -> Property A) wins over a looser
- * text-only rule for the same payee. Within each pass, rules are tried in the
- * order given and the first match wins.
+ * Rules are tried most-specific first, so a rule pinned to an exact amount
+ * (e.g. NATWEST BANK + £428.06 -> Property A) wins over a looser text-only
+ * rule for the same payee, and a type-narrowed rule wins over one without.
+ * Rules of equal specificity are tried in the order given, first match wins.
  *
- * @param {{details: string, amount: number}} transaction
+ * @param {{details?: string, transactionType?: string, amount?: number}} transaction
  * @param {import('./types.js').Rule[]} rules
  * @returns {import('./types.js').Rule|null}
  */
 export function findMatchingRule(transaction, rules) {
-  const pinned = rules.filter((r) => r.amountEquals !== undefined);
-  const unpinned = rules.filter((r) => r.amountEquals === undefined);
-
-  for (const rule of pinned) {
-    if (matchesText(rule, transaction.details) && amountMatches(rule, transaction.amount)) return rule;
-  }
-  for (const rule of unpinned) {
-    if (matchesText(rule, transaction.details)) return rule;
+  const ordered = orderRules(rules);
+  for (const rule of ordered) {
+    if (matchesRule(rule, transaction)) return rule;
   }
   return null;
 }
 
 /**
+ * Rules in evaluation order: most specific first, insertion order preserved
+ * within a tier. The Rules page lists them this way so the table reads as the
+ * order they actually fire in.
+ */
+export function orderRules(rules) {
+  return rules
+    .map((rule, index) => ({ rule, index }))
+    .sort((a, b) => specificity(b.rule) - specificity(a.rule) || a.index - b.index)
+    .map((entry) => entry.rule);
+}
+
+/**
  * Counts how many of the given transactions each rule would claim.
  * @param {import('./types.js').Rule[]} rules
- * @param {{details: string, amount: number}[]} transactions
+ * @param {{details?: string, transactionType?: string, amount?: number}[]} transactions
  * @returns {Map<string, number>}
  */
 export function countMatches(rules, transactions) {
@@ -70,13 +121,25 @@ export function countMatches(rules, transactions) {
 /**
  * True when the same matchText is already used by a rule pointing at a
  * different property — the signal that this payee is shared and the new rule
- * should be pinned to an amount to disambiguate.
+ * needs another condition to disambiguate.
  *
  * @param {string} matchText
  * @param {string} propertyId
  * @param {import('./types.js').Rule[]} rules
  */
 export function shouldSuggestAmountPin(matchText, propertyId, rules) {
-  const needle = matchText.trim().toLowerCase();
-  return rules.some((r) => r.matchText.trim().toLowerCase() === needle && r.propertyId !== propertyId);
+  const needle = (matchText ?? '').trim().toLowerCase();
+  if (needle === '') return false;
+  return rules.some(
+    (r) => hasText(r) && r.matchText.trim().toLowerCase() === needle && r.propertyId !== propertyId,
+  );
+}
+
+/** Human-readable summary of a rule's conditions, e.g. for tooltips. */
+export function describeRule(rule, formatAmount = (n) => String(n)) {
+  const parts = [];
+  if (hasText(rule)) parts.push(`Details ${rule.matchType} "${rule.matchText}"`);
+  if (hasType(rule)) parts.push(`Type is "${rule.transactionTypeEquals}"`);
+  if (hasAmount(rule)) parts.push(`Amount is ${formatAmount(rule.amountEquals)}`);
+  return parts.length > 0 ? parts.join(' and ') : 'No conditions set';
 }

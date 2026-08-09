@@ -1,5 +1,7 @@
 # Property Expenses
 
+**Live app: https://dbeale.github.io/PropertyExpensesV2/**
+
 A single-user, browser-only tool for categorising buy-to-let bank transactions, ready for UK Self
 Assessment property income reporting.
 
@@ -13,10 +15,12 @@ third-party service.
   Rows already imported from an overlapping statement are flagged and skipped by default.
 - **Review table** — editable Property and Category per row, filterable by text, date and status
   (auto-categorised by rule vs. needs manual review).
-- **Rule engine** — rules match the `Details` field and auto-fill Property and Category on import.
-  Assigning an uncategorised row by hand offers to remember it as a rule.
-- **Rule management** — add, edit and delete rules; see how many transactions each one currently
-  claims, and whether it is text-only or pinned to an exact amount.
+- **Rule engine** — rules match on any combination of Details text, Transaction Type and exact
+  amount, and auto-fill Property and Category on import.
+- **One-click rules from a transaction** — click **Rule** on any row to open an editor pre-filled
+  from it, with a live count of how many transactions the rule would claim.
+- **Rule management** — add, edit and delete rules; see the conditions each one sets, how many
+  transactions it currently claims, and the order they are evaluated in.
 - **Properties** — add, rename and delete. Categories are the fixed five: Rent, Ins, Repairs,
   Interest, Management.
 - **Backup** — download everything as one JSON file and restore from it. This is the safety net
@@ -41,34 +45,58 @@ Date,Details,Transaction Type,In,Out,Balance
 - Exactly one of `In` (money received) or `Out` (money spent) is populated per row. Internally
   amounts are stored signed: **In is positive, Out is negative.**
 - `Balance` is kept for reference but isn't used for categorisation.
-- `Transaction Type` is a hint only; rules match against `Details`.
+- `Transaction Type` is free text from the bank. Rules match on `Details` by default, but can also
+  require an exact Transaction Type.
 - Quoted fields, embedded commas, CRLF endings and a UTF-8 BOM are all handled. An unexpected header
   or an unparseable row is reported with the offending line number, and nothing is imported.
 
 ## How rules match
 
-A rule has match text (`contains` by default, or `exact` / `regex`), an optional pinned amount, a
-property and a category. On import, each transaction is tested in this order, stopping at the first
-match:
+A rule sets up to three conditions, in **any combination**, and assigns a property and a category:
 
-1. Rules whose text matches **and** whose pinned amount equals the transaction amount exactly.
-2. Rules whose text matches and which have no pinned amount.
+| Condition | Matches on                                       | Notes                                    |
+| --------- | ------------------------------------------------ | ---------------------------------------- |
+| Details   | the `Details` text                               | `contains` (default), `exact` or `regex` |
+| Type      | the `Transaction Type` column                    | exact, case-insensitive                  |
+| Amount    | the exact signed amount                          | to the penny; expenses are negative      |
 
-That ordering lets an amount-pinned rule win over a looser text-only rule for the same payee. For
-example, with a lender that bills several properties from the same name:
+A transaction must satisfy **every** condition the rule sets; unticked conditions are ignored. At
+least one condition is required — a rule with none would match everything, and is rejected.
 
-| Match text     | Amount pin | Property   | Category |
-| -------------- | ---------- | ---------- | -------- |
-| `NATWEST BANK` | `-428.06`  | Property A | Interest |
-| `NATWEST BANK` | `-512.40`  | Property B | Interest |
+### Creating a rule from a transaction
 
-A `NATWEST BANK` payment of £428.06 goes to Property A, one of £512.40 goes to Property B, and one
-for any other amount is left **unassigned for manual review** rather than being guessed at. Pinned
-amounts are signed, so an expense is entered as a negative number.
+The fastest route. On the **Transactions** tab, click **Rule** on any row. The editor opens
+pre-filled from that transaction — suggested match text, its Transaction Type, its exact amount, and
+its current property and category. Tick whichever conditions you want and save. A live counter shows
+how many of your stored transactions the rule would claim before you commit, and the rule is applied
+to existing transactions immediately.
 
-When you assign an uncategorised row by hand, the app offers to save it as a rule. If that match text
-is already used by a *different* property, it defaults to pinning the amount — that collision is the
-signal the payee is shared.
+The suggested match text is the longest informative word in the description, skipping generic banking
+noise like `BANK`, `DIRECT`, `DEBIT` — so `S Agyapong 3 PETERBOROUGH GAT` suggests `PETERBOROUGH`.
+
+Assigning both Property and Category by hand on an uncategorised row opens the same editor
+automatically, so the common case is one click.
+
+### Evaluation order
+
+Rules are tried **most specific first**, stopping at the first match. Specificity counts the
+conditions set, weighting Amount highest, then Type, then Details. Rules of equal specificity are
+tried in the order they were created. The Rules page lists them in exactly this order, numbered.
+
+That ordering lets a narrow rule win over a looser one for the same payee. For example, with a lender
+billing several properties under one name:
+
+| Details        | Type | Amount    | Property   | Category |
+| -------------- | ---- | --------- | ---------- | -------- |
+| `NATWEST BANK` | any  | `-428.06` | Property A | Interest |
+| `NATWEST BANK` | any  | `-512.40` | Property B | Interest |
+
+A `NATWEST BANK` payment of £428.06 goes to Property A, £512.40 goes to Property B, and any other
+amount is left **unassigned for manual review** rather than being guessed at.
+
+When you build a rule from a transaction whose suggested text is already used by a *different*
+property, the Amount condition is ticked for you and the editor says why — that collision is the
+signal the payee is shared and needs pinning.
 
 "Re-apply to all transactions" on the Rules page re-runs the engine over stored transactions.
 Rows you assigned by hand are left alone; rows a rule assigned are updated, or cleared if no rule
@@ -109,8 +137,11 @@ statement, and the shared-payee disambiguation including the unmatched-amount ca
 3. copies `index.html`, `src/` and `.nojekyll` into `_site/`, leaving tests and docs out,
 4. uploads that as a Pages artifact and deploys it.
 
+The published site is **https://dbeale.github.io/PropertyExpensesV2/**.
+
 One-time setup: in the repository settings, under **Pages → Build and deployment**, set **Source** to
-**GitHub Actions**. The first push to `main` after that publishes the site.
+**GitHub Actions**. Until that is set, `configure-pages` fails with `Get Pages site failed … Not
+Found`. The first push to `main` afterwards publishes the site.
 
 All asset paths are relative and navigation uses the URL hash (`#/transactions`), so the app works
 unchanged at a repo subpath like `https://username.github.io/repo-name/` with no rewrite rules.
@@ -132,7 +163,8 @@ index.html            page shell
 src/
   main.js             hash router and layout
   csv.js              CSV parsing/export, UK date and amount handling
-  rules.js            rule matching and ordering
+  rules.js            rule conditions, matching and specificity ordering
+  rule-draft.js       pre-fill and validation for the rule editor
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB
   db.js               IndexedDB wrapper

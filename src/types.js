@@ -13,6 +13,9 @@
  * @property {MatchType} matchType
  * @property {number} [amountEquals] Only matches transactions with this exact
  *   signed amount. Used to disambiguate a payee shared across properties.
+ * @property {string} [transactionTypeEquals] Only matches transactions with
+ *   this Transaction Type (case-insensitive). Narrows a payee that appears as
+ *   both, say, a Direct Debit and a Card Payment.
  * @property {string} propertyId
  * @property {Category} category
  *
