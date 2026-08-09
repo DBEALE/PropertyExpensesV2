@@ -242,6 +242,26 @@ either one keeps it — and filtering by a property *and* a category together sh
 holding that exact pair. "Unassigned" finds rows with no assignment at all, while "Uncategorised"
 also catches non-property rows, which are classified but carry no category.
 
+### On a phone
+
+The layout adapts by **viewport and pointer**, not by sniffing the user-agent string — the UA tells
+you which browser is running, not how much room it has, and it gets tablets, split-screen windows and
+desktop-mode phones wrong.
+
+- **Up to 1000px** the layout relaxes: toolbars stack and wrap, tables scroll sideways.
+- **Below 720px** each table row becomes a **card**. Eight columns can't be read on a phone however
+  much they scroll, so every cell is shown on its own line with its column name beside it — copied
+  from the table's own header, so a label can never disagree with the column it names.
+- Because the header row is hidden in card mode, a **Sort by** control appears above each table.
+  It is generated from the real heading buttons and clicks them, so sorting behaves identically on
+  both layouts rather than being re-implemented.
+- The tab bar scrolls horizontally instead of wrapping; the rule editor becomes a full-screen sheet;
+  charts stay scrollable with their table view underneath.
+- Where the device has a **coarse pointer** (touch), every control is padded to the ~44px minimum tap
+  target, independently of screen width — a touchscreen laptop gets this too.
+
+Everything remains available on a phone; nothing is hidden behind "use a desktop".
+
 ### Working through a long list
 
 The page heading and tabs stay pinned to the top as you scroll, and table headings stick directly
@@ -399,6 +419,7 @@ src/
   property-details.js dated property records, LTV, upcoming dates
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
+  responsive.js       card-mode cell labels and the mobile sort control
   transaction-filter.js  the filter predicates both screens share
   views/transaction-table.js  the table itself, editable or read-only
   charts.js           small SVG chart builders (columns, legend, table view)

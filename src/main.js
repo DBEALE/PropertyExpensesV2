@@ -1,5 +1,6 @@
 import { isAssigned } from './allocation.js';
 import { clear, el, toast } from './dom.js';
+import { applyResponsive, watchBreakpoint } from './responsive.js';
 import { getState, load, subscribe } from './store.js';
 import { renderAccounts } from './views/accounts.js';
 import { renderBackup } from './views/backup.js';
@@ -71,6 +72,9 @@ function render() {
   clear(view);
   route.render(view, route.id === 'import' ? navigate : render, route.param);
   measureHeader();
+  // Tables become cards on a narrow screen; this labels their cells and adds
+  // the sort control that replaces the hidden headings.
+  applyResponsive(view);
 }
 
 /**
@@ -91,6 +95,8 @@ if (typeof ResizeObserver === 'function') {
 }
 
 window.addEventListener('hashchange', render);
+// Rotating the phone can cross the breakpoint, so re-lay-out when it does.
+watchBreakpoint(render);
 // Keep the "needs review" badge honest after writes from any view.
 subscribe(() => renderNav(currentRoute()));
 

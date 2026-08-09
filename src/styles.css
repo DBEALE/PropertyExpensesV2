@@ -569,12 +569,6 @@ tr.row-duplicate {
   color: var(--accent);
 }
 
-@media (max-width: 560px) {
-  .suggestions {
-    padding-left: 0;
-  }
-}
-
 /* --- split allocations -------------------------------------------------- */
 
 .allocation-rows {
@@ -986,12 +980,6 @@ tr.row-split td {
   white-space: nowrap;
 }
 
-@media (max-width: 560px) {
-  .allocation-rows {
-    padding-left: 0;
-  }
-}
-
 .rule-preview {
   margin: 10px 0 0;
   font-size: 13px;
@@ -1053,16 +1041,307 @@ tr.row-split td {
   color: #fff;
 }
 
-@media (max-width: 720px) {
+/* ======================================================================
+ * Narrow screens
+ *
+ * Detected by viewport and pointer, never by the user-agent string — the UA
+ * says which browser is running, not how much room it has.
+ *
+ * Between 720px and 1000px the layout only relaxes: toolbars stack, tables
+ * scroll sideways. Below 720px each table row becomes a card, because eight
+ * columns cannot be read on a phone however much they scroll.
+ * ====================================================================== */
+
+@media (max-width: 1000px) {
+  .toolbar {
+    gap: 8px;
+  }
+
+  .toolbar select,
+  .toolbar input[type='search'] {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+
   table.data {
     display: block;
     overflow-x: auto;
   }
 
   /* The table becomes its own scroll container here, which a sticky heading
-     would anchor to instead of the page — so it stays put on narrow screens. */
+     would anchor to instead of the page — so it stays put. */
   table.data thead th,
   table.data tfoot th {
     position: static;
+  }
+}
+
+/* Touch devices: every control clears the ~44px minimum tap target. */
+@media (pointer: coarse) {
+  button,
+  select,
+  input,
+  .tab {
+    min-height: 44px;
+  }
+
+  button.link,
+  .badge-link {
+    min-height: 36px;
+    padding: 8px 10px;
+  }
+
+  .swatch-option {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sort-button {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    padding: 10px 12px 0;
+  }
+
+  .app-header h1 {
+    font-size: 17px;
+  }
+
+  /* The reassurance is worth a line on a desktop; on a phone it is worth more
+     as vertical space, and the same sentence is on the Backup screen. */
+  .privacy {
+    display: none;
+  }
+
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px;
+    margin-top: 8px;
+    /* Let the row scroll without a visible bar eating height. */
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    flex: none;
+    padding: 8px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .view {
+    padding: 12px;
+  }
+
+  .toolbar {
+    gap: 8px;
+  }
+
+  .toolbar h2 {
+    flex: 1 1 100%;
+    margin-right: 0;
+  }
+
+  .toolbar select,
+  .toolbar input,
+  .toolbar button {
+    flex: 1 1 140px;
+  }
+
+  .toolbar label.inline {
+    flex: 1 1 140px;
+  }
+
+  .toolbar label.inline input {
+    width: 100%;
+  }
+
+  /* --- tables become cards ------------------------------------------- */
+
+  table.data {
+    display: block;
+    overflow-x: visible;
+    border: none;
+    background: none;
+  }
+
+  table.data thead {
+    /* Hidden, not removed: the sort control is generated from these buttons,
+       and screen readers still get the labels via each cell's data-label. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  table.data tbody,
+  table.data tfoot {
+    display: block;
+  }
+
+  table.data tbody tr,
+  table.data tfoot tr {
+    display: block;
+    margin: 0 0 10px;
+    padding: 4px 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+  }
+
+  table.data td,
+  table.data tfoot th {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: auto;
+    padding: 6px 12px;
+    border-bottom: none;
+    text-align: right;
+  }
+
+  table.data td:not(:last-child),
+  table.data tfoot th:not(:last-child) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* The column name, copied from the table's own thead by responsive.js. */
+  table.data td[data-label]::before,
+  table.data tfoot th[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+  }
+
+  /* A cell with nothing in it is noise on a card. */
+  table.data td:empty {
+    display: none;
+  }
+
+  table.data td.details {
+    max-width: none;
+    text-align: right;
+  }
+
+  table.data td select {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 60%;
+  }
+
+  table.data .actions {
+    justify-content: flex-end;
+  }
+
+  tr.row-split td {
+    align-items: flex-start;
+  }
+
+  .mobile-sort {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+
+  .mobile-sort .hint {
+    flex: none;
+  }
+
+  .mobile-sort-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* --- everything else ------------------------------------------------ */
+
+  .tiles {
+    gap: 8px;
+  }
+
+  .tile {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    padding: 10px 12px;
+  }
+
+  .tile-value {
+    font-size: 18px;
+  }
+
+  .rule-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    overflow-y: auto;
+  }
+
+  .condition > label.inline,
+  .condition.outcome > span {
+    min-width: 100%;
+  }
+
+  .suggestions,
+  .allocation-rows {
+    padding-left: 0;
+  }
+
+  .allocation-row select,
+  .allocation-amount {
+    flex: 1 1 100%;
+    width: auto;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+
+  .detail-grid dd {
+    margin-bottom: 8px;
+  }
+
+  .detail-fields label {
+    flex: 1 1 100%;
+  }
+
+  .chart-svg {
+    min-width: 280px;
+  }
+
+  .cards {
+    flex-wrap: wrap;
+  }
+
+  .row-form {
+    padding: 10px;
+  }
+
+  .row-form label {
+    flex: 1 1 100%;
+  }
+
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+    text-align: center;
   }
 }
