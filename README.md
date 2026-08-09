@@ -31,6 +31,8 @@ third-party service.
   against browser storage being cleared.
 - **Accounts** — a per-property view: money in and out each month as a chart, and the recurring
   payments behind it, with the next rent, mortgage and insurance dates worked out from history.
+- **Property status** — each property's page flags what needs doing: recurring payments that have
+  stopped arriving, and compliance certificates (gas safety, EICR, PAT, legionella) coming due.
 - **Colour identity** — every property and category carries a colour, used consistently on every
   screen.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
@@ -74,6 +76,44 @@ need about it beyond the bank statements:
 From the mortgage balance and the latest valuation the page computes **LTV** and **equity**, and
 shows them alongside the net figure from your actual statements. Anything falling due within 90 days
 — a fixed rate ending, an insurance renewal, a tenancy ending — is flagged at the top.
+
+### Does this property need anything from me?
+
+The top of the property page answers that in one place.
+
+**Needs attention / Coming up** — a single banner merging three sources, sorted by date: dated
+records falling due (fixed-rate end, insurance renewal, tenancy end), compliance items due within 90
+days, and recurring payments that haven't arrived. Overdue items are listed first, styled distinctly
+and labelled with how late they are ("Gas Safety Certificate — due 24/07/2026, 14 days ago"), because
+"this lapsed three weeks ago" is a different kind of fact from "insurance renews in September".
+
+**Recurring payments** — the same detection that drives the Accounts tab, scoped to this property:
+typical amount, which day of the month it usually lands, when it last arrived, when the next is
+expected. Anything overdue is flagged on its own row as well as in the banner. This is display-only
+reuse; the detection itself is unchanged.
+
+**Compliance** — gas safety certificates, EICRs and the like. These can't be inferred from a bank
+statement: they don't appear reliably in payee text, don't recur monthly, and their frequency varies
+by type. So each is logged explicitly with **Log completion** (date, optional certificate reference,
+optional notes), and the next due date is computed from the last one plus the type's frequency.
+
+A type never logged against a property reads **never recorded** rather than being given a due date
+computed from nothing — a fabricated deadline is worse than an obvious gap.
+
+There is deliberately **no cost field and no link to a transaction** on a completion. The invoice for
+an inspection is categorised in Transactions like any other expense; this is a schedule, not a
+ledger, and keeping them apart stops the same money being counted twice.
+
+### Compliance types
+
+Shared across every property and edited on the **Properties & categories** tab, alongside categories
+— same pattern, same reasons. Seeded with Gas Safety Certificate (12 months), EICR (60), PAT Testing
+(12) and Legionella Risk Assessment (24), then yours to rename, re-time, add to or delete. Ids are
+the slug of the original name, so a rename never orphans the completions logged against it. Deleting
+a type also removes its completions, and says how many before you confirm.
+
+*Not built yet:* a portfolio-wide "everything due across all properties" view. This is property-page
+only — the natural next step once it has been used in anger.
 
 ### Nothing is overwritten
 
@@ -417,6 +457,7 @@ src/
   palette.js          the eight identity colour slots
   accounts.js         monthly totals and recurring-payment detection
   property-details.js dated property records, LTV, upcoming dates
+  compliance.js       inspection schedule: next due, overdue, upcoming
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
   responsive.js       card-mode cell labels and the mobile sort control

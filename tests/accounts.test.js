@@ -192,6 +192,31 @@ describe('isOverdue', () => {
   });
 });
 
+describe('acceptance: two months of rent, then a month with nothing', () => {
+  const rent = [
+    transaction('2026-05-24', 'S Agyapong PETERBOROUGH', 1150, { matchedRuleId: 'rent' }),
+    transaction('2026-06-24', 'S Agyapong PETERBOROUGH', 1150, { matchedRuleId: 'rent' }),
+  ];
+
+  it('flags the rent as overdue once the third month passes with no payment', () => {
+    // Asked on 28 July: July's rent was expected on the 24th and never arrived.
+    const [stream] = paymentStreams(sharesFor(rent, 'p1'), '2026-07-28');
+    assert.equal(stream.recurring, true);
+    assert.equal(isOverdue(stream, '2026-07-28'), true);
+  });
+
+  it('does not flag it before the third payment is due', () => {
+    const [stream] = paymentStreams(sharesFor(rent, 'p1'), '2026-07-20');
+    assert.equal(isOverdue(stream, '2026-07-20'), false);
+  });
+
+  it('clears as soon as the third month lands', () => {
+    const paid = [...rent, transaction('2026-07-24', 'S Agyapong PETERBOROUGH', 1150, { matchedRuleId: 'rent' })];
+    const [stream] = paymentStreams(sharesFor(paid, 'p1'), '2026-07-28');
+    assert.equal(isOverdue(stream, '2026-07-28'), false);
+  });
+});
+
 describe('accountSummary', () => {
   it('totals income, expenses and net', () => {
     const totals = accountSummary(sharesFor(HISTORY, 'p1'));

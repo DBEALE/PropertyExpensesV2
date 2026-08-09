@@ -1,3 +1,5 @@
+import { addDays } from './dates.js';
+
 /**
  * Everything recorded about a property beyond its name — address, insurance,
  * mortgage, valuation, tenancy — kept as *dated records* rather than fields
@@ -223,8 +225,3 @@ export function upcomingDates(records, propertyId, today, withinDays = 90) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function addDays(isoDate, days) {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d + days));
-  return date.toISOString().slice(0, 10);
-}

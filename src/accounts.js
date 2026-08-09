@@ -7,6 +7,7 @@
  */
 import { allocationsOf, sumAllocations, toPence, fromPence } from './allocation.js';
 import { isNonProperty } from './categories.js';
+import { addMonths } from './dates.js';
 
 /** Every share belonging to one property, each carrying its transaction. */
 export function sharesFor(transactions, propertyId) {
@@ -95,15 +96,6 @@ function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-}
-
-function addMonths(isoDate, count) {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  const target = new Date(Date.UTC(year, month - 1 + count, 1));
-  // Clamp to the last day of the target month, so the 31st doesn't skip February.
-  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-  const safeDay = Math.min(day, lastDay);
-  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 }
 
 /**

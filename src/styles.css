@@ -748,6 +748,56 @@ table.data.read-only tbody tr:hover {
   background: var(--bg);
 }
 
+/* --- attention: overdue vs merely upcoming ------------------------------- */
+
+.attention {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+}
+
+.attention-overdue {
+  border-color: var(--danger);
+}
+
+.attention-group {
+  flex: 1 1 260px;
+}
+
+.attention-group ul {
+  margin: 4px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.attention-group li {
+  padding: 2px 0;
+}
+
+/* Overdue is a state, not a series colour: it ships with the word "Overdue"
+   beside it so the meaning never rests on the colour alone. */
+.badge-overdue {
+  color: var(--danger);
+  border-color: var(--danger);
+  font-weight: 600;
+}
+
+tr.row-overdue > td {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.overdue-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+input.months {
+  width: 80px;
+  text-align: right;
+}
+
 /* --- property detail ----------------------------------------------------- */
 
 .property-link {

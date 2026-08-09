@@ -3,7 +3,9 @@
  * tenancy — each kept as a dated record, with everything it replaced still
  * readable underneath.
  */
-import { accountSummary, sharesFor } from '../accounts.js';
+import { accountSummary, isOverdue, paymentStreams, sharesFor } from '../accounts.js';
+import { complianceStatus, upcomingCompliance } from '../compliance.js';
+import { addMonths } from '../dates.js';
 import { el, entityTag, money, toast, ukDate } from '../dom.js';
 import { slotClass } from '../palette.js';
 import {
@@ -14,13 +16,19 @@ import {
   loanToValue,
   upcomingDates,
 } from '../property-details.js';
-import { deletePropertyDetail, getState, savePropertyDetail } from '../store.js';
+import {
+  deleteComplianceCompletion,
+  deletePropertyDetail,
+  getState,
+  saveComplianceCompletion,
+  savePropertyDetail,
+} from '../store.js';
 
 /** Which section is open for editing, so a re-render doesn't close it. */
 let editing = null;
 
 export function renderProperty(root, rerender, propertyId) {
-  const { properties, propertyDetails, transactions } = getState();
+  const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
   const property = properties.find((p) => p.id === propertyId);
 
   if (!property) {
@@ -61,21 +69,319 @@ export function renderProperty(root, rerender, propertyId) {
     ),
   );
 
-  const upcoming = upcomingDates(propertyDetails, propertyId, today, 90);
-  if (upcoming.length > 0) {
-    root.append(
-      el(
-        'div',
-        { class: 'notice' },
-        el('strong', {}, 'Coming up: '),
-        upcoming.map((item) => `${item.label} ${ukDate(item.date)}`).join(' · '),
-      ),
-    );
-  }
+  const streams = paymentStreams(sharesFor(transactions, propertyId), today).filter((s) => s.recurring);
+  const lateStreams = streams.filter((s) => isOverdue(s, today));
+
+  renderComingUp(root, {
+    dated: upcomingDates(propertyDetails, propertyId, today, 90),
+    compliance: upcomingCompliance(complianceTypes, complianceCompletions, propertyId, today, 90),
+    lateStreams,
+    today,
+  });
+
+  renderRecurring(root, streams, today);
+  renderCompliance(root, property, complianceTypes, complianceCompletions, today, rerender);
 
   for (const section of SECTIONS) {
     root.append(renderSection(section, property, propertyDetails, rerender));
   }
+}
+
+/**
+ * One banner for everything wanting attention, sorted by date.
+ *
+ * Overdue items read differently from merely-upcoming ones and are listed
+ * first regardless of date — "the gas certificate lapsed three weeks ago" is a
+ * different kind of fact from "insurance renews in September", and the old
+ * banner drew no distinction at all.
+ */
+function renderComingUp(root, { dated, compliance, lateStreams, today }) {
+  const items = [
+    ...lateStreams.map((stream) => ({
+      label: `${stream.label} not received`,
+      date: stream.nextExpected,
+      overdue: true,
+      since: addMonths(stream.lastDate, 1),
+    })),
+    ...compliance.map((item) => ({ ...item, since: item.date })),
+    ...dated.map((item) => ({ ...item, overdue: false })),
+  ];
+  if (items.length === 0) return;
+
+  const overdue = items.filter((i) => i.overdue).sort((a, b) => a.since.localeCompare(b.since));
+  const soon = items.filter((i) => !i.overdue).sort((a, b) => a.date.localeCompare(b.date));
+
+  root.append(
+    el(
+      'div',
+      { class: `notice attention${overdue.length > 0 ? ' attention-overdue' : ''}` },
+      overdue.length > 0
+        ? el(
+            'div',
+            { class: 'attention-group' },
+            el('strong', {}, 'Needs attention'),
+            el(
+              'ul',
+              {},
+              ...overdue.map((item) =>
+                el(
+                  'li',
+                  {},
+                  el('span', { class: 'badge badge-overdue' }, 'Overdue'),
+                  ` ${item.label} — due ${ukDate(item.since)}, ${daysBetween(item.since, today)} days ago`,
+                ),
+              ),
+            ),
+          )
+        : null,
+      soon.length > 0
+        ? el(
+            'div',
+            { class: 'attention-group' },
+            el('strong', {}, 'Coming up'),
+            el(
+              'ul',
+              {},
+              ...soon.map((item) => el('li', {}, `${item.label} — ${ukDate(item.date)}`)),
+            ),
+          )
+        : null,
+    ),
+  );
+}
+
+function daysBetween(from, to) {
+  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
+  return Math.max(0, Math.round(ms / 86400000));
+}
+
+/**
+ * The recurring payments this property expects, straight from the same
+ * detection the Accounts tab uses — scoped here to one property.
+ */
+function renderRecurring(root, streams, today) {
+  root.append(
+    el('h3', {}, 'Recurring payments'),
+    el(
+      'p',
+      { class: 'hint' },
+      'Worked out from the statements you have imported. A payment is flagged when nothing has ' +
+        'arrived since it was expected.',
+    ),
+  );
+
+  if (streams.length === 0) {
+    root.append(
+      el('div', { class: 'empty' }, 'No repeating payments spotted yet — import another month to see them.'),
+    );
+    return;
+  }
+
+  root.append(
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          el('th', {}, 'Payment'),
+          el('th', { class: 'num' }, 'Typical'),
+          el('th', {}, 'Usually'),
+          el('th', {}, 'Last received'),
+          el('th', {}, 'Next expected'),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...streams.map((stream) => {
+          const late = isOverdue(stream, today);
+          return el(
+            'tr',
+            { class: late ? 'row-overdue' : '' },
+            el(
+              'td',
+              { class: 'details' },
+              stream.label,
+              late
+                ? el(
+                    'div',
+                    { class: 'overdue-note' },
+                    el('span', { class: 'badge badge-overdue' }, 'Overdue'),
+                    ` nothing since ${ukDate(stream.lastDate)}`,
+                  )
+                : null,
+            ),
+            el(
+              'td',
+              { class: `num ${stream.typicalAmount < 0 ? 'out' : 'in'}` },
+              money(stream.typicalAmount),
+            ),
+            el('td', {}, `${stream.direction === 'in' ? 'in' : 'out'} on the ${ordinal(stream.typicalDay)}`),
+            el('td', {}, ukDate(stream.lastDate)),
+            el('td', {}, ukDate(stream.nextExpected)),
+          );
+        }),
+      ),
+    ),
+  );
+}
+
+function ordinal(day) {
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? 'st'
+      : day % 10 === 2 && day !== 12
+        ? 'nd'
+        : day % 10 === 3 && day !== 13
+          ? 'rd'
+          : 'th';
+  return `${day}${suffix}`;
+}
+
+/**
+ * Certificates and inspections. Unlike the payments above, nothing here can be
+ * inferred from the bank — each row is only as current as the last completion
+ * logged against it.
+ */
+function renderCompliance(root, property, types, completions, today, rerender) {
+  const statuses = complianceStatus(types, completions, property.id, today);
+
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Compliance'),
+      el('a', { class: 'link', href: '#/properties' }, 'Edit types'),
+    ),
+    el(
+      'p',
+      { class: 'hint' },
+      'These can’t be read from a bank statement, so log each one when it is done. The payment for ' +
+        'it is categorised in Transactions as usual — this is the schedule, not the cost.',
+    ),
+  );
+
+  if (statuses.length === 0) {
+    root.append(
+      el('div', { class: 'empty' }, 'No compliance types set up. ', el('a', { href: '#/properties' }, 'Add some')),
+    );
+    return;
+  }
+
+  root.append(
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          el('th', {}, 'Item'),
+          el('th', { class: 'num' }, 'Every'),
+          el('th', {}, 'Last done'),
+          el('th', {}, 'Next due'),
+          el('th', {}, ''),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...statuses.map((status) =>
+          el(
+            'tr',
+            { class: status.overdue ? 'row-overdue' : '' },
+            el(
+              'td',
+              { class: 'details', title: status.type.description },
+              status.type.name,
+              status.history.length > 1
+                ? el('div', { class: 'share' }, `${status.history.length} logged`)
+                : null,
+            ),
+            el('td', { class: 'num' }, `${status.type.frequencyMonths} mo`),
+            el(
+              'td',
+              {},
+              status.lastCompletedDate
+                ? ukDate(status.lastCompletedDate)
+                : el('span', { class: 'unset' }, 'never recorded'),
+            ),
+            el(
+              'td',
+              {},
+              status.nextDue === null
+                ? el('span', { class: 'unset' }, '—')
+                : status.overdue
+                  ? el(
+                      'span',
+                      {},
+                      el('span', { class: 'badge badge-overdue' }, 'Overdue'),
+                      ` since ${ukDate(status.nextDue)}`,
+                    )
+                  : ukDate(status.nextDue),
+            ),
+            el(
+              'td',
+              { class: 'actions' },
+              el(
+                'button',
+                {
+                  class: 'link',
+                  onclick: () => logCompletion(property, status.type, today, rerender),
+                },
+                'Log completion',
+              ),
+              status.lastCompletion
+                ? el(
+                    'button',
+                    {
+                      class: 'link danger',
+                      title: 'Remove the most recent entry, if it was logged by mistake',
+                      onclick: () => {
+                        if (!confirm(`Remove the ${ukDate(status.lastCompletedDate)} entry for ${status.type.name}?`)) {
+                          return;
+                        }
+                        void deleteComplianceCompletion(status.lastCompletion.id).then(rerender);
+                      },
+                    },
+                    'Undo last',
+                  )
+                : null,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/** Logs an inspection: when it was done, plus an optional certificate number. */
+function logCompletion(property, type, today, rerender) {
+  const completedDate = prompt(`When was the ${type.name} completed?\n\nDate (YYYY-MM-DD):`, today);
+  if (completedDate === null) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(completedDate.trim())) {
+    toast('Enter the date as YYYY-MM-DD.', 'error');
+    return;
+  }
+  const reference = prompt('Certificate or reference number (optional):', '') ?? '';
+  const notes = prompt('Notes (optional):', '') ?? '';
+
+  void saveComplianceCompletion({
+    propertyId: property.id,
+    complianceTypeId: type.id,
+    completedDate: completedDate.trim(),
+    reference: reference.trim(),
+    notes: notes.trim(),
+  }).then(() => {
+    toast(`${type.name} logged.`);
+    rerender();
+  });
 }
 
 function tile(label, value, tone = '') {

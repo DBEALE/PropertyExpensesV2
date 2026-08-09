@@ -1,5 +1,6 @@
 import { hasSplit } from './allocation.js';
 import { DEFAULT_CATEGORIES, NON_PROPERTY_NAME, isNonProperty } from './categories.js';
+import { DEFAULT_COMPLIANCE_TYPES, completionsForType } from './compliance.js';
 import { slotClass } from './palette.js';
 import { supersede } from './property-details.js';
 import * as db from './db.js';
@@ -7,7 +8,15 @@ import { recategorise } from './importer.js';
 import { validateBackup } from './backup.js';
 
 /** In-memory mirror of IndexedDB, refreshed after every write. */
-const state = { properties: [], categories: [], propertyDetails: [], rules: [], transactions: [] };
+const state = {
+  properties: [],
+  categories: [],
+  propertyDetails: [],
+  complianceTypes: [],
+  complianceCompletions: [],
+  rules: [],
+  transactions: [],
+};
 const listeners = new Set();
 
 export function getState() {
@@ -23,13 +32,16 @@ function notify() {
 }
 
 export async function load() {
-  let [properties, categories, propertyDetails, rules, transactions] = await Promise.all([
-    db.getAll('properties'),
-    db.getAll('categories'),
-    db.getAll('propertyDetails'),
-    db.getAll('rules'),
-    db.getAll('transactions'),
-  ]);
+  let [properties, categories, propertyDetails, complianceTypes, complianceCompletions, rules, transactions] =
+    await Promise.all([
+      db.getAll('properties'),
+      db.getAll('categories'),
+      db.getAll('propertyDetails'),
+      db.getAll('complianceTypes'),
+      db.getAll('complianceCompletions'),
+      db.getAll('rules'),
+      db.getAll('transactions'),
+    ]);
   // First run, or an install predating editable categories: seed the five
   // defaults. Their ids match the names older records stored, so existing
   // transactions and rules keep resolving.
@@ -37,9 +49,17 @@ export async function load() {
     categories = DEFAULT_CATEGORIES.map((c) => ({ ...c }));
     await db.putMany('categories', categories);
   }
+  // Same shape as the category seeding above: fill in the defaults once, then
+  // they are the user's to edit.
+  if (complianceTypes.length === 0) {
+    complianceTypes = DEFAULT_COMPLIANCE_TYPES.map((t) => ({ ...t }));
+    await db.putMany('complianceTypes', complianceTypes);
+  }
   state.properties = properties.sort((a, b) => a.name.localeCompare(b.name));
   state.categories = categories;
   state.propertyDetails = propertyDetails;
+  state.complianceTypes = complianceTypes;
+  state.complianceCompletions = complianceCompletions;
   state.rules = rules;
   state.transactions = transactions.sort((a, b) => b.date.localeCompare(a.date));
   notify();
@@ -139,6 +159,9 @@ export async function deleteProperty(id) {
   for (const detail of state.propertyDetails.filter((d) => d.propertyId === id)) {
     await db.remove('propertyDetails', detail.id);
   }
+  for (const completion of state.complianceCompletions.filter((c) => c.propertyId === id)) {
+    await db.remove('complianceCompletions', completion.id);
+  }
   const touched = state.transactions.filter((t) => referencesProperty(t, id)).map(unassign);
   if (touched.length > 0) await db.putMany('transactions', touched);
   await load();
@@ -189,6 +212,52 @@ export async function deletePropertyDetail(id) {
 
 export function detailsFor(propertyId) {
   return state.propertyDetails.filter((r) => r.propertyId === propertyId);
+}
+
+// --- Compliance ---------------------------------------------------------
+
+export async function saveComplianceType(type) {
+  await db.put('complianceTypes', type);
+  await load();
+}
+
+/**
+ * Deletes a compliance type and the completions logged against it — the same
+ * detach-everything-referencing-it approach as deleteCategory. Without the
+ * cascade those rows would sit in the store pointing at nothing, and the
+ * backup validator would reject the next export.
+ */
+export async function deleteComplianceType(id) {
+  await db.remove('complianceTypes', id);
+  for (const completion of completionsForType(state.complianceCompletions, id)) {
+    await db.remove('complianceCompletions', completion.id);
+  }
+  await load();
+}
+
+/** How many logged completions a type would take with it if deleted. */
+export function complianceTypeUsage(id) {
+  return {
+    completions: completionsForType(state.complianceCompletions, id).length,
+  };
+}
+
+export async function saveComplianceCompletion({ propertyId, complianceTypeId, completedDate, reference, notes }) {
+  await db.put('complianceCompletions', {
+    id: db.newId(),
+    propertyId,
+    complianceTypeId,
+    completedDate,
+    reference: reference ?? '',
+    notes: notes ?? '',
+  });
+  await load();
+}
+
+/** Deletes one logged completion — for correcting a mistaken entry. */
+export async function deleteComplianceCompletion(id) {
+  await db.remove('complianceCompletions', id);
+  await load();
 }
 
 // --- Rules --------------------------------------------------------------

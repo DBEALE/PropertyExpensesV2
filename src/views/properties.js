@@ -1,14 +1,18 @@
 import { categoryIdFor } from '../categories.js';
+import { complianceTypeIdFor } from '../compliance.js';
 import { newId } from '../db.js';
 import { SLOTS, nextSlot, slotOf } from '../palette.js';
 import { el, entityTag, sortableTh, swatch, toast } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import {
   categoryUsage,
+  complianceTypeUsage,
   deleteCategory,
+  deleteComplianceType,
   deleteProperty,
   getState,
   saveCategory,
+  saveComplianceType,
   saveProperty,
 } from '../store.js';
 
@@ -39,6 +43,7 @@ function colourPicker(record, onPick) {
 
 const propertySort = { key: 'name', dir: 'asc' };
 const categorySort = { key: null, dir: 'asc' };
+const complianceSort = { key: null, dir: 'asc' };
 
 export function renderProperties(root, rerender) {
   const { properties, rules, transactions } = getState();
@@ -173,6 +178,172 @@ export function renderProperties(root, rerender) {
   }
 
   renderCategories(root, rerender);
+  renderComplianceTypes(root, rerender);
+}
+
+/**
+ * Compliance types are shared reference data in the same sense categories are
+ * — one list used by every property — so they are edited here rather than on
+ * any one property's page.
+ */
+function renderComplianceTypes(root, rerender) {
+  const { complianceTypes } = getState();
+
+  const nameInput = el('input', { type: 'text', placeholder: 'e.g. Fire alarm service', required: true });
+  const monthsInput = el('input', { type: 'number', min: '1', step: '1', value: '12', class: 'months' });
+  const descriptionInput = el('input', {
+    type: 'text',
+    class: 'wide',
+    placeholder: 'What this covers (optional)',
+  });
+
+  const rows = sortRows(complianceTypes, complianceSort, {
+    name: (t) => t.name,
+    frequency: (t) => Number(t.frequencyMonths),
+    description: (t) => t.description ?? '',
+    completions: (t) => complianceTypeUsage(t.id).completions,
+  });
+  const kTh = (label, key, options) =>
+    sortableTh(label, key, complianceSort, (k) => {
+      toggleSort(complianceSort, k, k === 'name' || k === 'description' ? 'asc' : 'desc');
+      rerender();
+    }, options);
+
+  root.append(
+    el('h3', {}, 'Compliance types'),
+    el(
+      'p',
+      { class: 'hint' },
+      'Certificates and inspections that fall due on a fixed cycle. They can’t be read from a bank ' +
+        'statement, so each property logs its own completions on its page; this is the shared list ' +
+        'of what to track and how often.',
+    ),
+    el(
+      'form',
+      {
+        class: 'row-form',
+        onsubmit: (event) => {
+          event.preventDefault();
+          const name = nameInput.value.trim();
+          if (name === '') return;
+          const months = Number(monthsInput.value);
+          if (!Number.isFinite(months) || months <= 0) {
+            toast('Enter how many months between inspections.', 'error');
+            return;
+          }
+          if (complianceTypes.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+            toast('A compliance type with that name already exists.', 'error');
+            return;
+          }
+          void saveComplianceType({
+            id: complianceTypeIdFor(name, complianceTypes),
+            name,
+            frequencyMonths: Math.round(months),
+            description: descriptionInput.value.trim(),
+          }).then(() => {
+            toast('Compliance type added.');
+            rerender();
+          });
+        },
+      },
+      el('label', {}, 'Name ', nameInput),
+      el('label', {}, 'Every (months) ', monthsInput),
+      el('label', { class: 'grow' }, 'Description ', descriptionInput),
+      el('button', { class: 'primary', type: 'submit' }, 'Add type'),
+    ),
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          kTh('Name', 'name'),
+          kTh('Every', 'frequency', { class: 'num' }),
+          kTh('Description', 'description'),
+          kTh('Logged', 'completions', { class: 'num' }),
+          el('th', {}, ''),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...rows.map((type) => {
+          const usage = complianceTypeUsage(type.id);
+          const name = el('input', { type: 'text', value: type.name, 'aria-label': 'Type name' });
+          const months = el('input', {
+            type: 'number',
+            min: '1',
+            step: '1',
+            class: 'months',
+            value: String(type.frequencyMonths),
+            'aria-label': 'Months between inspections',
+          });
+          const description = el('input', {
+            type: 'text',
+            class: 'wide',
+            value: type.description ?? '',
+            'aria-label': 'Type description',
+          });
+
+          const save = () => {
+            const trimmed = name.value.trim();
+            const every = Number(months.value);
+            if (trimmed === '') {
+              toast('A compliance type needs a name.', 'error');
+              return;
+            }
+            if (!Number.isFinite(every) || every <= 0) {
+              toast('Months between inspections must be a positive number.', 'error');
+              return;
+            }
+            void saveComplianceType({
+              ...type,
+              name: trimmed,
+              frequencyMonths: Math.round(every),
+              description: description.value.trim(),
+            }).then(() => {
+              toast('Compliance type saved.');
+              rerender();
+            });
+          };
+
+          return el(
+            'tr',
+            {},
+            el('td', {}, name),
+            el('td', { class: 'num' }, months),
+            el('td', {}, description),
+            el('td', { class: 'num' }, String(usage.completions)),
+            el(
+              'td',
+              { class: 'actions' },
+              el('button', { class: 'link', onclick: save }, 'Save'),
+              el(
+                'button',
+                {
+                  class: 'link danger',
+                  onclick: () => {
+                    const warning =
+                      `Delete the compliance type "${type.name}"?\n\n` +
+                      `This also removes ${usage.completions} logged completion(s) across all properties.`;
+                    if (!confirm(warning)) return;
+                    void deleteComplianceType(type.id).then(() => {
+                      toast('Compliance type deleted.');
+                      rerender();
+                    });
+                  },
+                },
+                'Delete',
+              ),
+            ),
+          );
+        }),
+      ),
+    ),
+  );
 }
 
 function renderCategories(root, rerender) {

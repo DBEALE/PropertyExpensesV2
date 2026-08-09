@@ -13,11 +13,13 @@ const FORMAT = 'property-expenses-backup';
 export function buildBackup(state, exportedAt) {
   return {
     format: FORMAT,
-    version: 3,
+    version: 4,
     exportedAt,
     properties: state.properties,
     categories: state.categories,
     propertyDetails: state.propertyDetails ?? [],
+    complianceTypes: state.complianceTypes ?? [],
+    complianceCompletions: state.complianceCompletions ?? [],
     rules: state.rules,
     transactions: state.transactions,
   };
@@ -105,6 +107,38 @@ export function validateBackup(raw) {
   if (propertyDetails.length !== rawDetails.length) {
     throw new BackupFormatError('Backup file contains malformed property details.');
   }
+  // Compliance is optional too: backups written before it existed have none,
+  // and those restore with the defaults seeded on the next load.
+  const rawTypes = Array.isArray(data.complianceTypes) ? data.complianceTypes : [];
+  const complianceTypes = rawTypes.filter(
+    (t) =>
+      t &&
+      typeof t.id === 'string' &&
+      t.id !== '' &&
+      typeof t.name === 'string' &&
+      Number.isFinite(Number(t.frequencyMonths)) &&
+      Number(t.frequencyMonths) > 0,
+  );
+  if (complianceTypes.length !== rawTypes.length) {
+    throw new BackupFormatError('Backup file contains malformed compliance types.');
+  }
+
+  const knownComplianceType = (id) => complianceTypes.some((t) => t.id === id);
+  const rawCompletions = Array.isArray(data.complianceCompletions) ? data.complianceCompletions : [];
+  const complianceCompletions = rawCompletions.filter(
+    (c) =>
+      c &&
+      typeof c.id === 'string' &&
+      typeof c.completedDate === 'string' &&
+      knownProperty(c.propertyId) &&
+      // A completion pointing at a type the file doesn't contain would show up
+      // as a schedule with no rule behind it, so it is rejected outright.
+      knownComplianceType(c.complianceTypeId),
+  );
+  if (complianceCompletions.length !== rawCompletions.length) {
+    throw new BackupFormatError('Backup file contains malformed compliance completions.');
+  }
+
   const rules = data.rules.filter(
     (r) =>
       r &&
@@ -133,5 +167,13 @@ export function validateBackup(raw) {
   ) {
     throw new BackupFormatError('Backup file contains malformed records.');
   }
-  return { properties, categories, propertyDetails, rules, transactions };
+  return {
+    properties,
+    categories,
+    propertyDetails,
+    complianceTypes,
+    complianceCompletions,
+    rules,
+    transactions,
+  };
 }
