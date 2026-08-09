@@ -23,8 +23,10 @@ third-party service.
   categories) by exact amounts, with the shares required to total the transaction to the penny.
 - **Rule management** — add, edit and delete rules; see the conditions each one sets, how many
   transactions it currently claims, and the order they are evaluated in.
-- **Properties** — add, rename and delete. Categories are the fixed five: Rent, Ins, Repairs,
-  Interest, Management.
+- **Properties & categories** — add, rename and delete properties. Categories are editable too:
+  rename them, describe what belongs in each, add your own, delete ones you don't use.
+- **Non-property classification** — mark personal spending and transfers as **Not a property**, so
+  they're classified rather than sitting in the review queue, and stay out of the property totals.
 - **Backup** — download everything as one JSON file and restore from it. This is the safety net
   against browser storage being cleared.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
@@ -51,6 +53,38 @@ Date,Details,Transaction Type,In,Out,Balance
   require an exact Transaction Type.
 - Quoted fields, embedded commas, CRLF endings and a UTF-8 BOM are all handled. An unexpected header
   or an unparseable row is reported with the offending line number, and nothing is imported.
+
+## Categories
+
+Categories start as five defaults — **Rent, Ins, Repairs, Interest, Management** — but they are your
+data, not a fixed list. On the **Properties & categories** tab you can rename any of them, give each
+a description of what belongs in it, add your own, and delete ones you don't use. A category's
+description appears as a tooltip everywhere the category is offered, and on the Summary column
+headings.
+
+Renaming is safe: each category has an id that never changes, so transactions and rules already
+pointing at it follow the rename. The five defaults are seeded with ids equal to their original names
+(`Rent`, `Ins`, …), which is why data recorded before categories became editable keeps working with
+no migration step.
+
+Deleting a category deletes the rules that use it and unassigns the transactions that reference it —
+the transactions themselves are kept. The table shows both counts before you confirm. The last
+remaining category can't be deleted.
+
+## Money that isn't property income
+
+Not every line on a landlord's statement belongs to a property: personal spending, transfers between
+your own accounts, a one-off that has nothing to do with the portfolio. Assign those to
+**Not a property**, offered in the Property dropdown alongside your real properties, in the rule
+editor, and as a share of a split.
+
+Doing so *classifies* the transaction — it leaves the "needs review" count and stops nagging — while
+keeping it out of the property figures:
+
+- the Summary shows **Not a property** on its own line, below the properties, for completeness;
+- it is **excluded from the "All properties" totals**, which is the figure a Self Assessment return
+  needs;
+- a split can send part of a transaction to a property and the rest to Not a property.
 
 ## How rules match
 
@@ -226,6 +260,7 @@ src/
   rules.js            rule conditions, matching and specificity ordering
   rule-draft.js       pre-fill and validation for the rule editor
   allocation.js       splitting a transaction across properties, in whole pence
+  categories.js       default categories and the non-property sentinel
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB
   db.js               IndexedDB wrapper

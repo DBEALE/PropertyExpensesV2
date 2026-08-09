@@ -4,7 +4,7 @@ import { el, money, toast } from '../dom.js';
 import { draftRuleFromTransaction, draftToRule, jitterBounds, validateDraft } from '../rule-draft.js';
 import { amountRange, countMatches, hasAmount, hasText, hasType } from '../rules.js';
 import { getState, saveRule } from '../store.js';
-import { CATEGORIES } from '../types.js';
+import { selectableProperties } from '../categories.js';
 
 const MATCH_TYPES = ['contains', 'exact', 'regex'];
 
@@ -36,15 +36,14 @@ function draftFromRule(rule) {
  * @param {() => void} options.onSaved
  */
 export function openRuleEditor({ transaction, rule, onSaved }) {
-  const { properties, rules, transactions } = getState();
-  if (properties.length === 0) {
-    toast('Add a property before creating rules.', 'error');
-    return;
-  }
+  const { categories, rules, transactions } = getState();
+  // "Not a property" is always offered, so a rule can classify personal
+  // spending even before any property has been added.
+  const properties = selectableProperties(getState().properties);
 
   const draft = rule ? draftFromRule(rule) : draftRuleFromTransaction(transaction, rules);
   if (!draft.propertyId) draft.propertyId = properties[0].id;
-  if (!draft.category) draft.category = CATEGORIES[0];
+  if (!draft.category) draft.category = categories[0].id;
 
   // --- condition: details text -----------------------------------------
   const useText = el('input', { type: 'checkbox', checked: draft.useText, onchange: sync });
@@ -154,7 +153,7 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
   const category = el(
     'select',
     { onchange: sync },
-    ...CATEGORIES.map((c) => el('option', { value: c, selected: c === draft.category }, c)),
+    ...categories.map((c) => el('option', { value: c.id, selected: c.id === draft.category, title: c.description }, c.name)),
   );
 
   // --- outcome: split across properties ---------------------------------
@@ -185,7 +184,7 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
     const halves = splitEvenly(total, 2);
     return halves.map((amount, i) => ({
       propertyId: properties[Math.min(i, properties.length - 1)].id,
-      category: draft.category ?? CATEGORIES[0],
+      category: draft.category ?? categories[0].id,
       amount,
     }));
   }
@@ -217,7 +216,7 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
             sync();
           },
         },
-        ...CATEGORIES.map((c) => el('option', { value: c, selected: c === allocation.category }, c)),
+        ...categories.map((c) => el('option', { value: c.id, selected: c.id === allocation.category, title: c.description }, c.name)),
       );
       const amountInput = el('input', {
         type: 'number',
@@ -267,7 +266,7 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
             type: 'button',
             onclick: () => {
               // New rows start at zero so the user states the value explicitly.
-              allocations.push({ propertyId: properties[0].id, category: CATEGORIES[0], amount: 0 });
+              allocations.push({ propertyId: properties[0].id, category: categories[0].id, amount: 0 });
               renderAllocations();
               sync();
             },

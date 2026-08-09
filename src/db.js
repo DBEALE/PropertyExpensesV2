@@ -1,7 +1,8 @@
 const DB_NAME = 'property-expenses';
-const DB_VERSION = 1;
+// v2 added the categories store, which used to be a fixed enum in code.
+const DB_VERSION = 2;
 
-export const STORES = ['properties', 'rules', 'transactions'];
+export const STORES = ['properties', 'categories', 'rules', 'transactions'];
 
 let dbPromise = null;
 

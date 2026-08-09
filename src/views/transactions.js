@@ -3,23 +3,27 @@ import { toCsv } from '../csv.js';
 import { download, el, money, toast, ukDate } from '../dom.js';
 import { filterByDate } from '../dates.js';
 import { describeRule } from '../rules.js';
-import { deleteTransaction, getState, propertyName, reapplyRules, updateTransaction } from '../store.js';
-import { CATEGORIES, isCategory } from '../types.js';
+import { categoryName, deleteTransaction, getState, propertyName, reapplyRules, updateTransaction } from '../store.js';
+import { isKnownCategory, selectableProperties } from '../categories.js';
 import { openRuleEditor } from './rule-editor.js';
 
 /** Filter state lives outside render so it survives re-renders. */
 const filters = { text: '', status: 'all', from: '', to: '' };
 
 export function renderTransactions(root, rerender) {
-  const { transactions, properties, rules } = getState();
+  const { transactions, categories, rules } = getState();
+  // "Not a property" sits alongside the real ones, so personal spending can be
+  // classified rather than left looking uncategorised.
+  const properties = selectableProperties(getState().properties);
 
-  if (properties.length === 0) {
+  if (getState().properties.length === 0) {
     root.append(
       el(
         'div',
         { class: 'notice' },
-        'Add a property first — then you can assign transactions to it. ',
-        el('a', { href: '#/properties' }, 'Go to Properties'),
+        'No properties yet — you can still classify rows as “Not a property”, but everything else ' +
+          'needs one. ',
+        el('a', { href: '#/properties' }, 'Add a property'),
       ),
     );
   }
@@ -158,11 +162,17 @@ export function renderTransactions(root, rerender) {
         'aria-label': 'Category',
         onchange: (event) => {
           const value = event.target.value;
-          void assign(transaction, { category: isCategory(value) ? value : null });
+          void assign(transaction, { category: isKnownCategory(value, categories) ? value : null });
         },
       },
       el('option', { value: '' }, '— unassigned —'),
-      ...CATEGORIES.map((c) => el('option', { value: c, selected: c === transaction.category }, c)),
+      ...categories.map((c) =>
+        el(
+          'option',
+          { value: c.id, selected: c.id === transaction.category, title: c.description },
+          c.name,
+        ),
+      ),
     );
 
     return el(
@@ -229,7 +239,7 @@ export function renderTransactions(root, rerender) {
         el('div', { class: 'share-amounts' }, ...shares.map((s) => el('div', { class: 'share' }, money(s.amount)))),
       ),
       cell((share) => propertyName(share.propertyId)),
-      cell((share) => share.category),
+      cell((share) => categoryName(share.category)),
       el(
         'td',
         {},

@@ -1,14 +1,14 @@
 import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
+import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
 import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
 import { download, el, money, toast } from '../dom.js';
 import { getState } from '../store.js';
-import { CATEGORIES } from '../types.js';
 
 /** Range state lives outside render so it survives re-renders. */
 const range = { from: '', to: '' };
 
 export function renderSummary(root, rerender) {
-  const { transactions, properties } = getState();
+  const { transactions, properties, categories } = getState();
   const visible = filterByDate(transactions, range.from, range.to);
   const taxYears = [currentTaxYear(), currentTaxYear() - 1, currentTaxYear() - 2];
 
@@ -76,11 +76,6 @@ export function renderSummary(root, rerender) {
     );
   }
 
-  if (properties.length === 0) {
-    root.append(el('div', { class: 'empty' }, 'No properties yet.'));
-    return;
-  }
-
   // Flatten to allocations once: a split transaction contributes one entry per
   // property, a simple one contributes a single entry for its whole amount.
   const shares = visible.flatMap((t) => allocationsOf(t));
@@ -88,14 +83,30 @@ export function renderSummary(root, rerender) {
   // tax return should not show £-30.160000000000004 in any export.
   const sum = (list) => sumAllocations(list);
 
+  // Rows are the real properties, plus a "Not a property" line whenever
+  // anything has been classified that way — visible rather than quietly
+  // excluded, but kept out of the property totals below.
+  const propertyRows = [...properties];
+  const hasNonProperty = shares.some((s) => isNonProperty(s.propertyId));
+  if (hasNonProperty) propertyRows.push({ id: NON_PROPERTY_ID, name: NON_PROPERTY_NAME });
+
+  if (propertyRows.length === 0) {
+    root.append(el('div', { class: 'empty' }, 'No properties yet.'));
+    return;
+  }
+
+  // Property totals deliberately exclude non-property money — that is the
+  // figure a Self Assessment return needs.
+  const propertyShares = shares.filter((s) => !isNonProperty(s.propertyId));
+
   const cellTotal = (propertyId, category) =>
     sum(shares.filter((s) => s.propertyId === propertyId && s.category === category));
 
-  const columnTotal = (category) => sum(shares.filter((s) => s.category === category));
+  const columnTotal = (category) => sum(propertyShares.filter((s) => s.category === category));
 
   const rowTotal = (propertyId) => sum(shares.filter((s) => s.propertyId === propertyId));
 
-  const grandTotal = sum(shares);
+  const grandTotal = sum(propertyShares);
 
   root.append(
     el(
@@ -108,20 +119,20 @@ export function renderSummary(root, rerender) {
           'tr',
           {},
           el('th', {}, 'Property'),
-          ...CATEGORIES.map((c) => el('th', { class: 'num' }, c)),
+          ...categories.map((c) => el('th', { class: 'num', title: c.description }, c.name)),
           el('th', { class: 'num' }, 'Net'),
         ),
       ),
       el(
         'tbody',
         {},
-        ...properties.map((property) =>
+        ...propertyRows.map((property) =>
           el(
             'tr',
-            {},
+            { class: isNonProperty(property.id) ? 'row-non-property' : '' },
             el('td', {}, property.name),
-            ...CATEGORIES.map((c) => {
-              const value = cellTotal(property.id, c);
+            ...categories.map((c) => {
+              const value = cellTotal(property.id, c.id);
               return el('td', { class: `num ${value < 0 ? 'out' : value > 0 ? 'in' : 'zero'}` }, money(value));
             }),
             el('td', { class: 'num strong' }, money(rowTotal(property.id))),
@@ -135,11 +146,19 @@ export function renderSummary(root, rerender) {
           'tr',
           {},
           el('th', {}, 'All properties'),
-          ...CATEGORIES.map((c) => el('th', { class: 'num' }, money(columnTotal(c)))),
+          ...categories.map((c) => el('th', { class: 'num' }, money(columnTotal(c.id)))),
           el('th', { class: 'num strong' }, money(grandTotal)),
         ),
       ),
     ),
+    hasNonProperty
+      ? el(
+          'p',
+          { class: 'hint' },
+          'The “Not a property” line is shown for completeness and is excluded from the ' +
+            '“All properties” totals.',
+        )
+      : null,
     el(
       'div',
       { class: 'toolbar' },
@@ -148,18 +167,22 @@ export function renderSummary(root, rerender) {
         {
           onclick: () => {
             const quote = (s) => `"${s.replace(/"/g, '""')}"`;
-            const rows = [
-              ['Property', ...CATEGORIES, 'Net'].join(','),
-              ...properties.map((p) =>
+            const lines = [
+              ['Property', ...categories.map((c) => c.name), 'Net'].join(','),
+              ...propertyRows.map((p) =>
                 [
                   quote(p.name),
-                  ...CATEGORIES.map((c) => cellTotal(p.id, c).toFixed(2)),
+                  ...categories.map((c) => cellTotal(p.id, c.id).toFixed(2)),
                   rowTotal(p.id).toFixed(2),
                 ].join(','),
               ),
-              ['All properties', ...CATEGORIES.map((c) => columnTotal(c).toFixed(2)), grandTotal.toFixed(2)].join(','),
+              [
+                'All properties',
+                ...categories.map((c) => columnTotal(c.id).toFixed(2)),
+                grandTotal.toFixed(2),
+              ].join(','),
             ];
-            download('summary.csv', rows.join('\r\n'), 'text/csv;charset=utf-8');
+            download('summary.csv', lines.join('\r\n'), 'text/csv;charset=utf-8');
             toast('Summary exported.');
           },
         },

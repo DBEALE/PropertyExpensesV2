@@ -2,7 +2,9 @@
  * Shared shapes, documented as JSDoc typedefs so editors still give
  * completion and type checking without a build step.
  *
- * @typedef {'Rent'|'Ins'|'Repairs'|'Interest'|'Management'} Category
+ * @typedef {string} CategoryId Id of a stored Category record.
+ * @typedef {{ id: string, name: string, description: string }} Category
+ *   User-editable. Seeded from DEFAULT_CATEGORIES in categories.js.
  * @typedef {'contains'|'exact'|'regex'} MatchType
  *
  * @typedef {{ id: string, name: string }} Property
@@ -46,10 +48,5 @@
  * @property {string} importedAt
  */
 
-/** The five fixed categories. Not user-editable. */
-export const CATEGORIES = /** @type {const} */ (['Rent', 'Ins', 'Repairs', 'Interest', 'Management']);
-
-/** @returns {value is Category} */
-export function isCategory(value) {
-  return typeof value === 'string' && CATEGORIES.includes(value);
-}
+// Categories now live in the `categories` store — see categories.js for the
+// seeded defaults and store.js for reading them.

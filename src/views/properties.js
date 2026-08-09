@@ -1,7 +1,14 @@
+import { categoryIdFor } from '../categories.js';
 import { newId } from '../db.js';
 import { el, toast } from '../dom.js';
-import { deleteProperty, getState, saveProperty } from '../store.js';
-import { CATEGORIES } from '../types.js';
+import {
+  categoryUsage,
+  deleteCategory,
+  deleteProperty,
+  getState,
+  saveCategory,
+  saveProperty,
+} from '../store.js';
 
 export function renderProperties(root, rerender) {
   const { properties, rules, transactions } = getState();
@@ -105,9 +112,132 @@ export function renderProperties(root, rerender) {
     );
   }
 
+  renderCategories(root, rerender);
+}
+
+function renderCategories(root, rerender) {
+  const { categories } = getState();
+
+  const nameInput = el('input', { type: 'text', placeholder: 'e.g. Ground rent', required: true });
+  const descriptionInput = el('input', {
+    type: 'text',
+    class: 'wide',
+    placeholder: 'What belongs in this category (optional)',
+  });
+
   root.append(
     el('h3', {}, 'Categories'),
-    el('p', { class: 'hint' }, 'Categories are fixed and cannot be edited.'),
-    el('ul', { class: 'chips' }, ...CATEGORIES.map((c) => el('li', { class: 'chip' }, c))),
+    el(
+      'p',
+      { class: 'hint' },
+      'Rename them, describe what belongs in each, and add your own. A category’s description shows ' +
+        'as a tooltip wherever it is offered.',
+    ),
+    el(
+      'form',
+      {
+        class: 'row-form',
+        onsubmit: (event) => {
+          event.preventDefault();
+          const name = nameInput.value.trim();
+          if (name === '') return;
+          if (categories.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+            toast('A category with that name already exists.', 'error');
+            return;
+          }
+          const category = {
+            id: categoryIdFor(name, categories),
+            name,
+            description: descriptionInput.value.trim(),
+          };
+          void saveCategory(category).then(() => {
+            toast('Category added.');
+            rerender();
+          });
+        },
+      },
+      el('label', {}, 'Name ', nameInput),
+      el('label', { class: 'grow' }, 'Description ', descriptionInput),
+      el('button', { class: 'primary', type: 'submit' }, 'Add category'),
+    ),
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          el('th', {}, 'Name'),
+          el('th', {}, 'Description'),
+          el('th', { class: 'num' }, 'Rules'),
+          el('th', { class: 'num' }, 'Transactions'),
+          el('th', {}, ''),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...categories.map((category) => {
+          const usage = categoryUsage(category.id);
+          const name = el('input', { type: 'text', value: category.name, 'aria-label': 'Category name' });
+          const description = el('input', {
+            type: 'text',
+            class: 'wide',
+            value: category.description ?? '',
+            'aria-label': 'Category description',
+            placeholder: 'What belongs here',
+          });
+
+          const save = () => {
+            const trimmed = name.value.trim();
+            if (trimmed === '') {
+              toast('A category needs a name.', 'error');
+              return;
+            }
+            void saveCategory({ ...category, name: trimmed, description: description.value.trim() }).then(
+              () => {
+                toast('Category saved.');
+                rerender();
+              },
+            );
+          };
+
+          return el(
+            'tr',
+            {},
+            el('td', {}, name),
+            el('td', {}, description),
+            el('td', { class: 'num' }, String(usage.rules)),
+            el('td', { class: 'num' }, String(usage.transactions)),
+            el(
+              'td',
+              { class: 'actions' },
+              el('button', { class: 'link', onclick: save }, 'Save'),
+              el(
+                'button',
+                {
+                  class: 'link danger',
+                  disabled: categories.length <= 1,
+                  onclick: () => {
+                    const warning =
+                      `Delete the category "${category.name}"?\n\n` +
+                      `This also deletes ${usage.rules} rule(s) and unassigns ${usage.transactions} ` +
+                      'transaction(s). The transactions themselves are kept.';
+                    if (!confirm(warning)) return;
+                    void deleteCategory(category.id).then(() => {
+                      toast('Category deleted.');
+                      rerender();
+                    });
+                  },
+                },
+                'Delete',
+              ),
+            ),
+          );
+        }),
+      ),
+    ),
   );
 }

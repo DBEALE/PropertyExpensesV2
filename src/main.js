@@ -12,7 +12,7 @@ const ROUTES = [
   { id: 'import', label: 'Import', render: renderImport },
   { id: 'transactions', label: 'Transactions', render: renderTransactions },
   { id: 'rules', label: 'Rules', render: renderRules },
-  { id: 'properties', label: 'Properties', render: renderProperties },
+  { id: 'properties', label: 'Properties & categories', render: renderProperties },
   { id: 'summary', label: 'Summary', render: renderSummary },
   { id: 'backup', label: 'Backup', render: renderBackup },
 ];
