@@ -1,5 +1,5 @@
 import { hasSplit } from '../allocation.js';
-import { el, money, toast } from '../dom.js';
+import { el, entityTag, money, toast } from '../dom.js';
 import {
   countMatches,
   describeAmount,
@@ -9,7 +9,15 @@ import {
   isExactAmount,
   orderRules,
 } from '../rules.js';
-import { deleteRule, getState, propertyName, reapplyRules } from '../store.js';
+import {
+  categoryName,
+  categorySlot,
+  deleteRule,
+  getState,
+  propertyName,
+  propertySlot,
+  reapplyRules,
+} from '../store.js';
 import { openRuleEditor } from './rule-editor.js';
 
 export function renderRules(root, rerender) {
@@ -133,12 +141,12 @@ export function renderRules(root, rerender) {
                     el(
                       'div',
                       { class: 'share' },
-                      `${propertyName(a.propertyId)} · ${a.category} · ${money(a.amount)}`,
+                      ...[entityTag(propertyName(a.propertyId), propertySlot(a.propertyId)), ' · ', entityTag(categoryName(a.category), categorySlot(a.category)), ` · ${money(a.amount)}`],
                     ),
                   ),
                 )
-              : el('td', {}, propertyName(rule.propertyId)),
-            hasSplit(rule) ? null : el('td', {}, rule.category),
+              : el('td', {}, entityTag(propertyName(rule.propertyId), propertySlot(rule.propertyId))),
+            hasSplit(rule) ? null : el('td', {}, entityTag(categoryName(rule.category), categorySlot(rule.category))),
             el('td', { class: 'num' }, String(counts.get(rule.id) ?? 0)),
             el(
               'td',

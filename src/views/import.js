@@ -1,9 +1,9 @@
 import { hasSplit } from '../allocation.js';
 import { CsvFormatError } from '../csv.js';
 import { newId } from '../db.js';
-import { el, money, toast, ukDate } from '../dom.js';
+import { el, entityTag, money, toast, ukDate } from '../dom.js';
 import { buildTransactions, isDuplicate } from '../importer.js';
-import { addTransactions, categoryName, getState, propertyName } from '../store.js';
+import { addTransactions, categoryName, categorySlot, getState, propertyName, propertySlot } from '../store.js';
 
 export function renderImport(root, navigate) {
   /** @type {{transaction: import('../types.js').Transaction, duplicate: boolean}[]} */
@@ -141,8 +141,8 @@ export function renderImport(root, navigate) {
                     ),
                   ),
                 )
-              : el('td', {}, propertyName(transaction.propertyId)),
-            hasSplit(transaction) ? null : el('td', {}, categoryName(transaction.category)),
+              : el('td', {}, entityTag(propertyName(transaction.propertyId), propertySlot(transaction.propertyId))),
+            hasSplit(transaction) ? null : el('td', {}, entityTag(categoryName(transaction.category), categorySlot(transaction.category))),
             el(
               'td',
               {},

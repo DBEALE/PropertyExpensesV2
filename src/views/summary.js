@@ -1,8 +1,9 @@
 import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
 import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
-import { download, el, money, toast } from '../dom.js';
+import { download, el, entityTag, money, toast } from '../dom.js';
 import { getState } from '../store.js';
+import { slotClass } from '../palette.js';
 
 /** Range state lives outside render so it survives re-renders. */
 const range = { from: '', to: '' };
@@ -119,7 +120,7 @@ export function renderSummary(root, rerender) {
           'tr',
           {},
           el('th', {}, 'Property'),
-          ...categories.map((c) => el('th', { class: 'num', title: c.description }, c.name)),
+          ...categories.map((c) => el('th', { class: 'num', title: c.description }, entityTag(c.name, slotClass(c), c.description))),
           el('th', { class: 'num' }, 'Net'),
         ),
       ),
@@ -130,7 +131,7 @@ export function renderSummary(root, rerender) {
           el(
             'tr',
             { class: isNonProperty(property.id) ? 'row-non-property' : '' },
-            el('td', {}, property.name),
+            el('td', {}, entityTag(property.name, isNonProperty(property.id) ? 'slot-neutral' : slotClass(property), property.name)),
             ...categories.map((c) => {
               const value = cellTotal(property.id, c.id);
               return el('td', { class: `num ${value < 0 ? 'out' : value > 0 ? 'in' : 'zero'}` }, money(value));

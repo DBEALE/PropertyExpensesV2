@@ -29,6 +29,33 @@
   }
 }
 
+/*
+ * Identity palette. Eight categorical slots, each with a step chosen for the
+ * light surface and a separate step chosen for the dark one — validated as a
+ * set against #ffffff and #1c2026. See src/palette.js before changing any hex.
+ */
+.slot-blue { --entity: #2a78d6; }
+.slot-orange { --entity: #eb6834; }
+.slot-aqua { --entity: #1baf7a; }
+.slot-yellow { --entity: #eda100; }
+.slot-magenta { --entity: #e87ba4; }
+.slot-green { --entity: #008300; }
+.slot-violet { --entity: #4a3aa7; }
+.slot-red { --entity: #e34948; }
+.slot-neutral { --entity: #898781; }
+
+@media (prefers-color-scheme: dark) {
+  .slot-blue { --entity: #3987e5; }
+  .slot-orange { --entity: #d95926; }
+  .slot-aqua { --entity: #199e70; }
+  .slot-yellow { --entity: #c98500; }
+  .slot-magenta { --entity: #d55181; }
+  .slot-green { --entity: #008300; }
+  .slot-violet { --entity: #9085e9; }
+  .slot-red { --entity: #e66767; }
+  .slot-neutral { --entity: #898781; }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -533,6 +560,193 @@ tr.row-duplicate {
 
 .remainder.off {
   color: var(--warn);
+}
+
+/* --- charts -------------------------------------------------------------- */
+
+.chart {
+  overflow-x: auto;
+  padding: 4px 0 8px;
+}
+
+.chart-svg {
+  display: block;
+  width: 100%;
+  min-width: 340px;
+  max-width: 960px;
+  height: auto;
+}
+
+.chart-svg .mark {
+  fill: var(--entity, var(--accent));
+}
+
+.chart-svg .mark:hover,
+.chart-svg .mark:focus-visible {
+  opacity: 0.82;
+  outline: none;
+}
+
+.chart-svg .grid-line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart-svg .axis-line {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+/* Text never wears the series colour — identity comes from the mark beside it. */
+.chart-svg .chart-tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-svg .chart-value {
+  fill: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 20;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 12px;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 25%);
+}
+
+.chart-table {
+  margin: 12px 0 4px;
+}
+
+.chart-table summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 20px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.tile-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tile-value {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.tile-value.in {
+  color: var(--in);
+}
+
+.tile-value.out {
+  color: var(--out);
+}
+
+.badge.overdue {
+  margin-left: 8px;
+}
+
+.oneoffs {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.oneoffs li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.oneoffs .num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* --- entity identity ---------------------------------------------------- */
+
+.entity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--entity, var(--muted));
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 12%);
+}
+
+.swatch.standalone {
+  display: inline-block;
+  vertical-align: -1px;
+}
+
+.swatch-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.swatch-option {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background: var(--entity);
+  cursor: pointer;
+}
+
+.swatch-option[aria-pressed='true'] {
+  border-color: var(--ink);
 }
 
 .row-form label.grow {

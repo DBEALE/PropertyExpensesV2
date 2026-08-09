@@ -29,6 +29,10 @@ third-party service.
   they're classified rather than sitting in the review queue, and stay out of the property totals.
 - **Backup** — download everything as one JSON file and restore from it. This is the safety net
   against browser storage being cleared.
+- **Accounts** — a per-property view: money in and out each month as a chart, and the recurring
+  payments behind it, with the next rent, mortgage and insurance dates worked out from history.
+- **Colour identity** — every property and category carries a colour, used consistently on every
+  screen.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
   (6 April – 5 April), exportable to CSV.
 - **Export** — categorised transactions to CSV, with Property and Category columns appended, ready
@@ -70,6 +74,55 @@ no migration step.
 Deleting a category deletes the rules that use it and unassigns the transactions that reference it —
 the transactions themselves are kept. The table shows both counts before you confirm. The last
 remaining category can't be deleted.
+
+## Colours
+
+Every property and category is assigned one of **eight fixed colours**, shown as a small swatch
+beside its name everywhere it appears — the transactions table, rules, the import preview, the
+summary, and the Accounts charts. Change one on the **Properties & categories** tab and it changes
+everywhere at once.
+
+The palette is a fixed set of eight rather than a free colour picker, and that is deliberate:
+
+- the eight hues and their **order** are what keep the set distinguishable under colourblindness, and
+  are validated against this app's own light and dark surfaces (`node scripts/validate_palette.js`
+  in the dataviz skill). An arbitrary hex would quietly break that;
+- each slot carries a **separate step for dark mode**, chosen for a dark surface rather than
+  algorithmically inverted;
+- three of the light-mode slots sit below 3:1 against the surface, so **a swatch never appears
+  without its name**, and every chart ships a table view. Colour is a fast second channel, never the
+  only one.
+
+New properties and categories take the next unused slot, so a small portfolio gets the
+best-separated colours first. Records created before colours existed get a stable colour derived
+from their id, so nothing is ever uncoloured and nothing shifts between sessions.
+
+## Accounts
+
+The **Accounts** tab answers "how is this property actually doing, and what is due next?" Pick a
+property — or *All properties*, or *Not a property* — and set a date range or tax year at the top;
+everything below re-renders against that one selection.
+
+**Headline tiles** — money in, money out, net, and how many entries make it up.
+
+**Monthly totals** — a stacked column chart with money in above the line and money out below it, on
+a single axis. For one property the stack is by category; for all properties it is by property, so
+the colours always answer the question the selector asked. Hover or keyboard-focus any block for its
+figure, and **Show the numbers** opens the exact table behind the chart. Past eight series the
+smallest fold into a neutral "Other" in the chart and stay itemised in the table.
+
+**Recurring payments** — the app works out which payments repeat by grouping transactions by the rule
+that categorised them (or by payee where no rule applies), keeping anything seen twice or more about
+a month apart. For each one it shows:
+
+- the day of the month it usually lands on ("Received around the 24th");
+- its typical amount, and how many times it has been seen;
+- when it last arrived, and **when the next one is expected**;
+- a warning when nothing has arrived since the expected date — the rent that hasn't come in.
+
+Expected dates are inferred from your imported statements, not fetched from the bank: they are an
+estimate, and the view says so. One-off payments are listed separately rather than being given a
+bogus schedule.
 
 ## Money that isn't property income
 
@@ -261,6 +314,9 @@ src/
   rule-draft.js       pre-fill and validation for the rule editor
   allocation.js       splitting a transaction across properties, in whole pence
   categories.js       default categories and the non-property sentinel
+  palette.js          the eight identity colour slots
+  accounts.js         monthly totals and recurring-payment detection
+  charts.js           small SVG chart builders (columns, legend, table view)
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB
   db.js               IndexedDB wrapper

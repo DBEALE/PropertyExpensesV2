@@ -31,6 +31,30 @@ export function clear(node) {
   node.replaceChildren();
 }
 
+/**
+ * A property or category as it appears anywhere on screen: its colour swatch
+ * followed by its name. The name is always present — three of the light-mode
+ * slots sit below 3:1 against the surface, so colour never carries the meaning
+ * on its own.
+ *
+ * @param {string} name
+ * @param {string} slotClass e.g. "slot-blue", from palette.js
+ * @param {string} [description] shown as a tooltip
+ */
+export function entityTag(name, slotClass, description) {
+  return el(
+    'span',
+    { class: `entity ${slotClass}`, title: description || name },
+    el('span', { class: 'swatch', 'aria-hidden': 'true' }),
+    name,
+  );
+}
+
+/** A bare swatch, for places that already show the name in an adjacent cell. */
+export function swatch(slotClass, label) {
+  return el('span', { class: `swatch standalone ${slotClass}`, title: label, role: 'img', 'aria-label': label });
+}
+
 /** Formats a signed amount as £1,234.56 / -£1,234.56. */
 export function money(amount) {
   const sign = amount < 0 ? '-' : '';

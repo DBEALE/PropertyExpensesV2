@@ -1,6 +1,7 @@
 import { categoryIdFor } from '../categories.js';
 import { newId } from '../db.js';
-import { el, toast } from '../dom.js';
+import { SLOTS, nextSlot, slotOf } from '../palette.js';
+import { el, entityTag, swatch, toast } from '../dom.js';
 import {
   categoryUsage,
   deleteCategory,
@@ -9,6 +10,31 @@ import {
   saveCategory,
   saveProperty,
 } from '../store.js';
+
+/**
+ * The eight palette slots as a row of buttons.
+ *
+ * Deliberately a fixed set rather than a free colour input: the slot order is
+ * what keeps the palette colourblind-safe and legible against both the light
+ * and dark surfaces, and an arbitrary hex would quietly break that.
+ */
+function colourPicker(record, onPick) {
+  const current = slotOf(record);
+  return el(
+    'div',
+    { class: 'swatch-picker' },
+    ...SLOTS.map((slot) =>
+      el('button', {
+        type: 'button',
+        class: `swatch-option slot-${slot.key}`,
+        title: slot.label,
+        'aria-label': `${slot.label} for ${record.name}`,
+        'aria-pressed': slot.key === current ? 'true' : 'false',
+        onclick: () => void onPick(slot.key),
+      }),
+    ),
+  );
+}
 
 export function renderProperties(root, rerender) {
   const { properties, rules, transactions } = getState();
@@ -29,7 +55,7 @@ export function renderProperties(root, rerender) {
             toast('A property with that name already exists.', 'error');
             return;
           }
-          void saveProperty({ id: newId(), name }).then(() => {
+          void saveProperty({ id: newId(), name, colour: nextSlot(properties) }).then(() => {
             toast('Property added.');
             rerender();
           });
@@ -54,6 +80,7 @@ export function renderProperties(root, rerender) {
             'tr',
             {},
             el('th', {}, 'Name'),
+            el('th', {}, 'Colour'),
             el('th', { class: 'num' }, 'Rules'),
             el('th', { class: 'num' }, 'Transactions'),
             el('th', {}, ''),
@@ -68,7 +95,8 @@ export function renderProperties(root, rerender) {
             return el(
               'tr',
               {},
-              el('td', {}, property.name),
+              el('td', {}, entityTag(property.name, `slot-${slotOf(property)}`)),
+              el('td', {}, colourPicker(property, (colour) => saveProperty({ ...property, colour }).then(rerender))),
               el('td', { class: 'num' }, String(ruleCount)),
               el('td', { class: 'num' }, String(txCount)),
               el(
@@ -149,6 +177,7 @@ function renderCategories(root, rerender) {
             id: categoryIdFor(name, categories),
             name,
             description: descriptionInput.value.trim(),
+            colour: nextSlot(categories),
           };
           void saveCategory(category).then(() => {
             toast('Category added.');
@@ -171,6 +200,7 @@ function renderCategories(root, rerender) {
           {},
           el('th', {}, 'Name'),
           el('th', {}, 'Description'),
+          el('th', {}, 'Colour'),
           el('th', { class: 'num' }, 'Rules'),
           el('th', { class: 'num' }, 'Transactions'),
           el('th', {}, ''),
@@ -207,8 +237,13 @@ function renderCategories(root, rerender) {
           return el(
             'tr',
             {},
-            el('td', {}, name),
+            el('td', { class: 'with-swatch' }, swatch(`slot-${slotOf(category)}`, category.name), name),
             el('td', {}, description),
+            el(
+              'td',
+              {},
+              colourPicker(category, (colour) => saveCategory({ ...category, colour }).then(rerender)),
+            ),
             el('td', { class: 'num' }, String(usage.rules)),
             el('td', { class: 'num' }, String(usage.transactions)),
             el(

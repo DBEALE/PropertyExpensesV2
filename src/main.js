@@ -1,6 +1,7 @@
 import { isAssigned } from './allocation.js';
 import { clear, el, toast } from './dom.js';
 import { getState, load, subscribe } from './store.js';
+import { renderAccounts } from './views/accounts.js';
 import { renderBackup } from './views/backup.js';
 import { renderImport } from './views/import.js';
 import { renderProperties } from './views/properties.js';
@@ -13,6 +14,7 @@ const ROUTES = [
   { id: 'transactions', label: 'Transactions', render: renderTransactions },
   { id: 'rules', label: 'Rules', render: renderRules },
   { id: 'properties', label: 'Properties & categories', render: renderProperties },
+  { id: 'accounts', label: 'Accounts', render: renderAccounts },
   { id: 'summary', label: 'Summary', render: renderSummary },
   { id: 'backup', label: 'Backup', render: renderBackup },
 ];

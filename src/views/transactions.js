@@ -1,9 +1,18 @@
 import { hasSplit, isAssigned } from '../allocation.js';
 import { toCsv } from '../csv.js';
-import { download, el, money, toast, ukDate } from '../dom.js';
+import { download, el, entityTag, money, swatch, toast, ukDate } from '../dom.js';
 import { filterByDate } from '../dates.js';
 import { describeRule } from '../rules.js';
-import { categoryName, deleteTransaction, getState, propertyName, reapplyRules, updateTransaction } from '../store.js';
+import {
+  categoryName,
+  categorySlot,
+  deleteTransaction,
+  getState,
+  propertyName,
+  propertySlot,
+  reapplyRules,
+  updateTransaction,
+} from '../store.js';
 import { isKnownCategory, selectableProperties } from '../categories.js';
 import { openRuleEditor } from './rule-editor.js';
 
@@ -182,8 +191,8 @@ export function renderTransactions(root, rerender) {
       el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
       el('td', {}, transaction.transactionType),
       el('td', { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` }, money(transaction.amount)),
-      el('td', {}, propertySelect),
-      el('td', {}, categorySelect),
+      el('td', { class: 'with-swatch' }, swatch(propertySlot(transaction.propertyId), propertyName(transaction.propertyId)), propertySelect),
+      el('td', { class: 'with-swatch' }, swatch(categorySlot(transaction.category), categoryName(transaction.category)), categorySelect),
       el(
         'td',
         {},
@@ -238,8 +247,8 @@ export function renderTransactions(root, rerender) {
         money(transaction.amount),
         el('div', { class: 'share-amounts' }, ...shares.map((s) => el('div', { class: 'share' }, money(s.amount)))),
       ),
-      cell((share) => propertyName(share.propertyId)),
-      cell((share) => categoryName(share.category)),
+      cell((share) => entityTag(propertyName(share.propertyId), propertySlot(share.propertyId))),
+      cell((share) => entityTag(categoryName(share.category), categorySlot(share.category))),
       el(
         'td',
         {},

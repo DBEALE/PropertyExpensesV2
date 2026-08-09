@@ -1,5 +1,6 @@
 import { hasSplit } from './allocation.js';
 import { DEFAULT_CATEGORIES, NON_PROPERTY_NAME, isNonProperty } from './categories.js';
+import { slotClass } from './palette.js';
 import * as db from './db.js';
 import { recategorise } from './importer.js';
 import { validateBackup } from './backup.js';
@@ -60,6 +61,27 @@ export function categoryName(id) {
 export function categoryDescription(id) {
   const category = state.categories.find((c) => c.id === id);
   return category?.description ?? '';
+}
+
+/** The record behind an id, for anything that needs its colour too. */
+export function propertyRecord(id) {
+  if (isNonProperty(id)) return { id, name: NON_PROPERTY_NAME, colour: 'neutral' };
+  return state.properties.find((p) => p.id === id) ?? null;
+}
+
+export function categoryRecord(id) {
+  return state.categories.find((c) => c.id === id) ?? null;
+}
+
+/** CSS slot class for a property id, falling back to neutral when unknown. */
+export function propertySlot(id) {
+  const record = propertyRecord(id);
+  return record ? slotClass(record) : 'slot-neutral';
+}
+
+export function categorySlot(id) {
+  const record = categoryRecord(id);
+  return record ? slotClass(record) : 'slot-neutral';
 }
 
 // --- Categories ---------------------------------------------------------
