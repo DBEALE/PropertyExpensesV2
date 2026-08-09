@@ -23,12 +23,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # No dependencies and no build step: the tests run on Node's own runner
-      # against the same ES modules the browser loads.
+      # against the same ES modules the browser loads. Bare `--test` discovers
+      # tests/**/*.test.js itself — passing a glob leaves it to the shell, which
+      # differs between local Windows and the Linux runner.
       - name: Run tests
-        run: node --test "tests/*.test.js"
+        run: node --test
 
       # Copy only what the site needs, leaving tests and docs out of the deploy.
       - name: Assemble site

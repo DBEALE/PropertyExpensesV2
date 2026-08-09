@@ -93,7 +93,7 @@ The parsing, rule-matching, import, backup and date logic live in DOM-free modul
 tested with Node's built-in test runner. No install required:
 
 ```bash
-node --test "tests/*.test.js"
+node --test
 ```
 
 These cover both acceptance cases: importing the three example rows with correct signs and dates,
