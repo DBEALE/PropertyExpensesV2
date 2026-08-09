@@ -135,7 +135,11 @@ export function paymentStreams(shares, today) {
         occurrences: [],
       });
     }
-    groups.get(key).occurrences.push({ date: share.transaction.date, amount: share.amount });
+    groups.get(key).occurrences.push({
+      date: share.transaction.date,
+      amount: share.amount,
+      transactionId: share.transaction.id,
+    });
   }
 
   return [...groups.values()]
@@ -155,6 +159,8 @@ export function paymentStreams(shares, today) {
         lastDate,
         typicalDay,
         typicalAmount: median(amounts.map(toPence)) / 100,
+        // The most recent occurrence, so a one-off can link straight to its row.
+        transactionId: group.occurrences.find((o) => o.date === lastDate)?.transactionId ?? null,
         total: sumAllocations(group.occurrences),
         recurring,
         nextExpected: recurring ? nextAfter(lastDate, today) : null,

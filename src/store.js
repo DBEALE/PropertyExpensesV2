@@ -1,12 +1,13 @@
 import { hasSplit } from './allocation.js';
 import { DEFAULT_CATEGORIES, NON_PROPERTY_NAME, isNonProperty } from './categories.js';
 import { slotClass } from './palette.js';
+import { supersede } from './property-details.js';
 import * as db from './db.js';
 import { recategorise } from './importer.js';
 import { validateBackup } from './backup.js';
 
 /** In-memory mirror of IndexedDB, refreshed after every write. */
-const state = { properties: [], categories: [], rules: [], transactions: [] };
+const state = { properties: [], categories: [], propertyDetails: [], rules: [], transactions: [] };
 const listeners = new Set();
 
 export function getState() {
@@ -22,9 +23,10 @@ function notify() {
 }
 
 export async function load() {
-  let [properties, categories, rules, transactions] = await Promise.all([
+  let [properties, categories, propertyDetails, rules, transactions] = await Promise.all([
     db.getAll('properties'),
     db.getAll('categories'),
+    db.getAll('propertyDetails'),
     db.getAll('rules'),
     db.getAll('transactions'),
   ]);
@@ -37,6 +39,7 @@ export async function load() {
   }
   state.properties = properties.sort((a, b) => a.name.localeCompare(b.name));
   state.categories = categories;
+  state.propertyDetails = propertyDetails;
   state.rules = rules;
   state.transactions = transactions.sort((a, b) => b.date.localeCompare(a.date));
   notify();
@@ -133,6 +136,9 @@ export async function deleteProperty(id) {
   for (const rule of state.rules.filter((r) => referencesProperty(r, id))) {
     await db.remove('rules', rule.id);
   }
+  for (const detail of state.propertyDetails.filter((d) => d.propertyId === id)) {
+    await db.remove('propertyDetails', detail.id);
+  }
   const touched = state.transactions.filter((t) => referencesProperty(t, id)).map(unassign);
   if (touched.length > 0) await db.putMany('transactions', touched);
   await load();
@@ -151,6 +157,38 @@ function referencesProperty(record, propertyId) {
 function unassign(transaction) {
   const { allocations, ...rest } = transaction;
   return { ...rest, propertyId: null, category: null, matchedRuleId: null };
+}
+
+// --- Property details ---------------------------------------------------
+
+/**
+ * Records a new version of one section. The record it replaces is kept and
+ * stamped with the date this one takes effect, so the old arrangement stays
+ * readable rather than being overwritten.
+ */
+export async function savePropertyDetail({ propertyId, section, data, effectiveFrom }) {
+  const { record, superseded } = supersede({
+    records: state.propertyDetails,
+    propertyId,
+    section,
+    data,
+    effectiveFrom,
+    recordedAt: new Date().toISOString(),
+    id: db.newId(),
+  });
+  const writes = superseded ? [superseded, record] : [record];
+  await db.putMany('propertyDetails', writes);
+  await load();
+}
+
+/** Deletes one historical record — for a mistake, not for tidying up. */
+export async function deletePropertyDetail(id) {
+  await db.remove('propertyDetails', id);
+  await load();
+}
+
+export function detailsFor(propertyId) {
+  return state.propertyDetails.filter((r) => r.propertyId === propertyId);
 }
 
 // --- Rules --------------------------------------------------------------

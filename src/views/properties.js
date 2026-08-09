@@ -95,7 +95,15 @@ export function renderProperties(root, rerender) {
             return el(
               'tr',
               {},
-              el('td', {}, entityTag(property.name, `slot-${slotOf(property)}`)),
+              el(
+                'td',
+                {},
+                el(
+                  'a',
+                  { href: `#/property/${encodeURIComponent(property.id)}`, class: 'property-link' },
+                  entityTag(property.name, `slot-${slotOf(property)}`),
+                ),
+              ),
               el('td', {}, colourPicker(property, (colour) => saveProperty({ ...property, colour }).then(rerender))),
               el('td', { class: 'num' }, String(ruleCount)),
               el('td', { class: 'num' }, String(txCount)),
@@ -113,6 +121,11 @@ export function renderProperties(root, rerender) {
                     },
                   },
                   'Rename',
+                ),
+                el(
+                  'a',
+                  { class: 'link', href: `#/property/${encodeURIComponent(property.id)}` },
+                  'Details',
                 ),
                 el(
                   'button',

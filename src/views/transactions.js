@@ -13,7 +13,8 @@ import {
   reapplyRules,
   updateTransaction,
 } from '../store.js';
-import { isKnownCategory, selectableProperties } from '../categories.js';
+import { isKnownCategory, isNonProperty, selectableProperties } from '../categories.js';
+import { highlight, setFocus, takeFocus } from '../focus.js';
 import { openRuleEditor } from './rule-editor.js';
 
 /** Filter state lives outside render so it survives re-renders. */
@@ -148,6 +149,24 @@ export function renderTransactions(root, rerender) {
     ),
   );
 
+  // Arriving from another screen ("show me that transaction"): make sure the
+  // row is in the current filter, then scroll to it and flash it.
+  const target = takeFocus('transactions');
+  if (target) {
+    const found = visible.some((t) => t.id === target);
+    if (!found && (filters.text || filters.status !== 'all' || filters.from || filters.to)) {
+      toast('Filters cleared to show that transaction.');
+      filters.text = '';
+      filters.status = 'all';
+      filters.from = '';
+      filters.to = '';
+      setFocus('transactions', target);
+      rerender();
+      return;
+    }
+    highlight(root.querySelector(`[data-transaction="${target}"]`));
+  }
+
   function row(transaction) {
     const assigned = isAssigned(transaction);
 
@@ -186,7 +205,7 @@ export function renderTransactions(root, rerender) {
 
     return el(
       'tr',
-      {},
+      { 'data-transaction': transaction.id },
       el('td', {}, ukDate(transaction.date)),
       el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
       el('td', {}, transaction.transactionType),
@@ -197,7 +216,18 @@ export function renderTransactions(root, rerender) {
         'td',
         {},
         transaction.matchedRuleId
-          ? el('span', { class: 'badge badge-ok', title: ruleLabel(transaction.matchedRuleId) }, 'By rule')
+          ? el(
+              'button',
+              {
+                class: 'badge badge-ok badge-link',
+                title: `${ruleLabel(transaction.matchedRuleId)}\n\nClick to open this rule.`,
+                onclick: () => {
+                  setFocus('rules', transaction.matchedRuleId);
+                  window.location.hash = '#/rules';
+                },
+              },
+              'By rule',
+            )
           : assigned
             ? el('span', { class: 'badge badge-manual' }, 'Manual')
             : el('span', { class: 'badge' }, 'Needs review'),
@@ -237,7 +267,7 @@ export function renderTransactions(root, rerender) {
 
     return el(
       'tr',
-      { class: 'row-split' },
+      { class: 'row-split', 'data-transaction': transaction.id },
       el('td', {}, ukDate(transaction.date)),
       el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
       el('td', {}, transaction.transactionType),
@@ -323,10 +353,20 @@ export function renderTransactions(root, rerender) {
     const next = { ...rest, ...change, matchedRuleId: null };
     await updateTransaction(next);
     rerender();
-    // Once both fields are set, offer to remember it — non-blocking, and the
-    // dialog is pre-filled from this row so it's one click to accept.
-    if (next.propertyId !== null && next.category !== null && change.category !== undefined) {
-      createRuleFrom(next);
+    // Once it is fully assigned, ask before opening the rule editor — most
+    // manual edits are one-offs, and the editor is a big interruption to
+    // dismiss every time.
+    // Non-property is complete the moment the property is set — there is no
+    // category to wait for.
+    const justClassified = isNonProperty(next.propertyId) && change.propertyId !== undefined;
+    const justCategorised =
+      next.propertyId !== null && next.category !== null && change.category !== undefined;
+    if (justClassified || justCategorised) {
+      const wanted = confirm(
+        `Assigned to ${propertyName(next.propertyId)}${next.category ? ` · ${categoryName(next.category)}` : ''}.\n\n` +
+          'Create a rule so future imports categorise this automatically?',
+      );
+      if (wanted) createRuleFrom(next);
     }
   }
 }

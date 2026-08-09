@@ -1,3 +1,5 @@
+import { isNonProperty } from './categories.js';
+
 /**
  * Splitting a transaction across properties.
  *
@@ -39,6 +41,11 @@ export function sumAllocations(allocations) {
  */
 export function allocationsOf(transaction) {
   if (hasSplit(transaction)) return transaction.allocations;
+  // Non-property money is classified but uncategorised: it contributes to the
+  // non-property line and to nothing else, so it needs no category.
+  if (isNonProperty(transaction.propertyId)) {
+    return [{ propertyId: transaction.propertyId, category: transaction.category, amount: transaction.amount }];
+  }
   if (transaction.propertyId && transaction.category) {
     return [
       { propertyId: transaction.propertyId, category: transaction.category, amount: transaction.amount },
@@ -47,8 +54,15 @@ export function allocationsOf(transaction) {
   return [];
 }
 
-/** True when a transaction is fully categorised, either way. */
+/**
+ * True when a transaction has been dealt with — so it leaves the review queue.
+ *
+ * Marking something as not a property expense counts: the decision has been
+ * made, and no category is needed for money that never reaches the property
+ * accounts. Everything else needs both a property and a category.
+ */
 export function isAssigned(transaction) {
+  if (isNonProperty(transaction?.propertyId)) return true;
   return allocationsOf(transaction).length > 0;
 }
 

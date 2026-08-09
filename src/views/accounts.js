@@ -13,6 +13,7 @@ import { NON_PROPERTY_ID, NON_PROPERTY_NAME } from '../categories.js';
 import { capSeries, chartTable, legend, stackedColumns } from '../charts.js';
 import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
 import { el, entityTag, money, ukDate } from '../dom.js';
+import { setFocus } from '../focus.js';
 import { slotClass } from '../palette.js';
 import { categoryName, getState } from '../store.js';
 
@@ -164,9 +165,14 @@ function renderCashflow(root, shares, selected, properties, categories) {
           ...properties.map((p) => ({ id: p.id, label: p.name, slot: slotClass(p) })),
           { id: NON_PROPERTY_ID, label: NON_PROPERTY_NAME, slot: 'slot-neutral' },
         ]
-      : categories.map((c) => ({ id: c.id, label: c.name, slot: slotClass(c) }));
+      : [
+          ...categories.map((c) => ({ id: c.id, label: c.name, slot: slotClass(c) })),
+          // Non-property money carries no category, so it needs a bucket of its
+          // own or it would vanish from a chart whose tiles still count it.
+          { id: null, label: 'Uncategorised', slot: 'slot-neutral' },
+        ];
 
-  const keyOf = selected === null ? (s) => s.propertyId : (s) => s.category;
+  const keyOf = selected === null ? (s) => s.propertyId : (s) => s.category ?? null;
 
   const allSeries = groups
     .map((group) => ({
@@ -291,18 +297,28 @@ function renderSchedule(root, shares) {
       el(
         'ul',
         { class: 'oneoffs' },
-        ...oneOffs
-          .slice(0, 12)
-          .map((stream) =>
+        ...oneOffs.slice(0, 12).map((stream) =>
+          el(
+            'li',
+            {},
             el(
-              'li',
-              {},
+              'button',
+              {
+                class: 'link oneoff-link',
+                title: 'Show this on the Transactions screen',
+                onclick: () => {
+                  setFocus('transactions', stream.transactionId);
+                  window.location.hash = '#/transactions';
+                },
+              },
               el('span', { class: `num ${stream.total < 0 ? 'out' : 'in'}` }, money(stream.total)),
-              ` · ${stream.label} · `,
-              categoryTag(stream.category),
-              ` · ${ukDate(stream.lastDate)}`,
+              ` · ${stream.label}`,
             ),
+            ' · ',
+            categoryTag(stream.category),
+            ` · ${ukDate(stream.lastDate)}`,
           ),
+        ),
         oneOffs.length > 12 ? el('li', { class: 'hint' }, `…and ${oneOffs.length - 12} more.`) : null,
       ),
     );

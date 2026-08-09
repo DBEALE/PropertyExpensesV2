@@ -58,6 +58,41 @@ Date,Details,Transaction Type,In,Out,Balance
 - Quoted fields, embedded commas, CRLF endings and a UTF-8 BOM are all handled. An unexpected header
   or an unparseable row is reported with the offending line number, and nothing is imported.
 
+## Property records
+
+Click a property on the **Properties & categories** tab to open its own page, holding everything you
+need about it beyond the bank statements:
+
+| Section | Records |
+| --- | --- |
+| Address | full address and notes |
+| Insurance | provider, policy number, cover level, premium, renewal date, login page, username |
+| Mortgage | lender, account, balance, rate and type, fixed-rate end, monthly payment and day, term end, login page, username, broker |
+| Valuation | market value and date, source, purchase price and date |
+| Tenancy | tenant and contact details, dates, rent and due day, deposit amount/scheme/reference, letting agent |
+
+From the mortgage balance and the latest valuation the page computes **LTV** and **equity**, and
+shows them alongside the net figure from your actual statements. Anything falling due within 90 days
+— a fixed rate ending, an insurance renewal, a tenancy ending — is flagged at the top.
+
+### Nothing is overwritten
+
+Every section is a **dated record**, not a set of fields. When you change one you give the date the
+new version takes effect; the previous version is stamped with that date and kept, marked **Expired**
+under *Previous versions*. So the rent that was £1,100 until June 2026 and £1,150 after it is still
+answerable next January, which is what a tax return actually asks.
+
+Records are per-section, so changing the mortgage doesn't touch the tenancy history. A replacement
+can't be dated before the version it replaces.
+
+### No passwords
+
+The login **page** and **username** are recorded for insurance and mortgage accounts; there is
+deliberately **no password field anywhere**. IndexedDB is not encrypted and the backup file is plain
+JSON, so a password stored here would sit in clear text on your disk and in every backup you make.
+Keep passwords in a password manager. (A test asserts no such field exists, so this can't be
+reintroduced by accident.)
+
 ## Categories
 
 Categories start as five defaults — **Rent, Ins, Repairs, Interest, Management** — but they are your
@@ -131,8 +166,9 @@ your own accounts, a one-off that has nothing to do with the portfolio. Assign t
 **Not a property**, offered in the Property dropdown alongside your real properties, in the rule
 editor, and as a share of a split.
 
-Doing so *classifies* the transaction — it leaves the "needs review" count and stops nagging — while
-keeping it out of the property figures:
+Doing so *classifies* the transaction — it **leaves the "needs review" count immediately**, with no
+category needed, since money that never reaches the property accounts doesn't need categorising —
+while staying out of the property figures:
 
 - the Summary shows **Not a property** on its own line, below the properties, for completeness;
 - it is **excluded from the "All properties" totals**, which is the figure a Self Assessment return
@@ -187,8 +223,15 @@ Match text defaults to the whole description so nothing from the row is lost. Un
 `S Agyapong 3 PETERBOROUGH GAT` that means one click to `PETERBOROUGH` — useful when the tenant
 reference varies between statements but the property name doesn't.
 
-Assigning both Property and Category by hand on an uncategorised row opens the same editor
-automatically, so the common case is one click.
+Finishing a manual assignment **asks** whether you want a rule rather than opening the editor
+uninvited — most hand edits are one-offs. Answer yes and the pre-filled editor opens.
+
+### Getting between screens
+
+- The **By rule** badge on a transaction opens the Rules tab scrolled to the rule that categorised
+  it, briefly highlighted.
+- A **one-off** in the Accounts view opens the Transactions tab at that exact row. If your current
+  filters would hide it, they're cleared and you're told why.
 
 ### Evaluation order
 
@@ -316,6 +359,8 @@ src/
   categories.js       default categories and the non-property sentinel
   palette.js          the eight identity colour slots
   accounts.js         monthly totals and recurring-payment detection
+  property-details.js dated property records, LTV, upcoming dates
+  focus.js            "take me to that row" hand-off between screens
   charts.js           small SVG chart builders (columns, legend, table view)
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB

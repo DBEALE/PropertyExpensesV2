@@ -13,10 +13,11 @@ const FORMAT = 'property-expenses-backup';
 export function buildBackup(state, exportedAt) {
   return {
     format: FORMAT,
-    version: 2,
+    version: 3,
     exportedAt,
     properties: state.properties,
     categories: state.categories,
+    propertyDetails: state.propertyDetails ?? [],
     rules: state.rules,
     transactions: state.transactions,
   };
@@ -89,6 +90,21 @@ export function validateBackup(raw) {
     isNonProperty(id) || data.properties.some((p) => p && p.id === id);
 
   const properties = data.properties.filter((p) => p && typeof p.id === 'string' && typeof p.name === 'string');
+  // Detail records are optional: backups written before they existed have none.
+  const rawDetails = Array.isArray(data.propertyDetails) ? data.propertyDetails : [];
+  const propertyDetails = rawDetails.filter(
+    (d) =>
+      d &&
+      typeof d.id === 'string' &&
+      typeof d.propertyId === 'string' &&
+      typeof d.section === 'string' &&
+      typeof d.effectiveFrom === 'string' &&
+      typeof d.data === 'object' &&
+      d.data !== null,
+  );
+  if (propertyDetails.length !== rawDetails.length) {
+    throw new BackupFormatError('Backup file contains malformed property details.');
+  }
   const rules = data.rules.filter(
     (r) =>
       r &&
@@ -117,5 +133,5 @@ export function validateBackup(raw) {
   ) {
     throw new BackupFormatError('Backup file contains malformed records.');
   }
-  return { properties, categories, rules, transactions };
+  return { properties, categories, propertyDetails, rules, transactions };
 }

@@ -1,8 +1,9 @@
 const DB_NAME = 'property-expenses';
 // v2 added the categories store, which used to be a fixed enum in code.
-const DB_VERSION = 2;
+// v3 added propertyDetails: dated records of address, mortgage, tenancy, etc.
+const DB_VERSION = 3;
 
-export const STORES = ['properties', 'categories', 'rules', 'transactions'];
+export const STORES = ['properties', 'categories', 'propertyDetails', 'rules', 'transactions'];
 
 let dbPromise = null;
 

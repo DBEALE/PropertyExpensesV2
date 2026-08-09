@@ -18,6 +18,7 @@ import {
   propertySlot,
   reapplyRules,
 } from '../store.js';
+import { highlight, takeFocus } from '../focus.js';
 import { openRuleEditor } from './rule-editor.js';
 
 export function renderRules(root, rerender) {
@@ -111,7 +112,7 @@ export function renderRules(root, rerender) {
         ...orderRules(rules).map((rule, i) =>
           el(
             'tr',
-            {},
+            { 'data-rule': rule.id },
             el('td', { class: 'num muted' }, String(i + 1)),
             el(
               'td',
@@ -176,6 +177,10 @@ export function renderRules(root, rerender) {
       ),
     ),
   );
+
+  // Arrived from a transaction's "By rule" badge: show which rule did it.
+  const target = takeFocus('rules');
+  if (target) highlight(root.querySelector(`[data-rule="${target}"]`));
 }
 
 function describe(rule) {

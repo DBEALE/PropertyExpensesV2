@@ -133,6 +133,9 @@ export function renderSummary(root, rerender) {
             { class: isNonProperty(property.id) ? 'row-non-property' : '' },
             el('td', {}, entityTag(property.name, isNonProperty(property.id) ? 'slot-neutral' : slotClass(property), property.name)),
             ...categories.map((c) => {
+              // Non-property money needs no category, so per-category cells
+              // would read as a row of £0.00 that contradicts its own Net.
+              if (isNonProperty(property.id)) return el('td', { class: 'num zero' }, '—');
               const value = cellTotal(property.id, c.id);
               return el('td', { class: `num ${value < 0 ? 'out' : value > 0 ? 'in' : 'zero'}` }, money(value));
             }),
@@ -173,7 +176,7 @@ export function renderSummary(root, rerender) {
               ...propertyRows.map((p) =>
                 [
                   quote(p.name),
-                  ...categories.map((c) => cellTotal(p.id, c.id).toFixed(2)),
+                  ...categories.map((c) => (isNonProperty(p.id) ? '' : cellTotal(p.id, c.id).toFixed(2))),
                   rowTotal(p.id).toFixed(2),
                 ].join(','),
               ),

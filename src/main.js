@@ -5,6 +5,7 @@ import { renderAccounts } from './views/accounts.js';
 import { renderBackup } from './views/backup.js';
 import { renderImport } from './views/import.js';
 import { renderProperties } from './views/properties.js';
+import { renderProperty } from './views/property.js';
 import { renderRules } from './views/rules.js';
 import { renderSummary } from './views/summary.js';
 import { renderTransactions } from './views/transactions.js';
@@ -17,6 +18,8 @@ const ROUTES = [
   { id: 'accounts', label: 'Accounts', render: renderAccounts },
   { id: 'summary', label: 'Summary', render: renderSummary },
   { id: 'backup', label: 'Backup', render: renderBackup },
+  // Reached from the property list rather than the tab bar.
+  { id: 'property', label: 'Property', render: renderProperty, hidden: true },
 ];
 
 const view = document.getElementById('view');
@@ -27,25 +30,33 @@ const nav = document.getElementById('nav');
  * repo subpath without any server-side rewrite rules.
  */
 function currentRoute() {
-  const id = window.location.hash.replace(/^#\/?/, '');
-  return ROUTES.find((r) => r.id === id) ?? ROUTES[0];
+  // "#/property/<id>" carries a parameter; every other route is a bare id.
+  const [id, param] = window.location.hash.replace(/^#\/?/, '').split('/');
+  const route = ROUTES.find((r) => r.id === id) ?? ROUTES[0];
+  return { ...route, param: param ? decodeURIComponent(param) : null };
 }
 
 function navigate(routeId) {
   window.location.hash = `#/${routeId}`;
 }
 
+/** The Properties tab stays lit while a single property is open. */
+function isActive(route, active) {
+  if (route.id === active.id) return true;
+  return route.id === 'properties' && active.id === 'property';
+}
+
 function renderNav(active) {
   clear(nav);
   const needsReview = getState().transactions.filter((t) => !isAssigned(t)).length;
-  for (const route of ROUTES) {
+  for (const route of ROUTES.filter((r) => !r.hidden)) {
     nav.append(
       el(
         'a',
         {
           href: `#/${route.id}`,
-          class: route.id === active.id ? 'tab active' : 'tab',
-          'aria-current': route.id === active.id ? 'page' : undefined,
+          class: isActive(route, active) ? 'tab active' : 'tab',
+          'aria-current': isActive(route, active) ? 'page' : undefined,
         },
         route.label,
         route.id === 'transactions' && needsReview > 0 ? el('span', { class: 'pill' }, String(needsReview)) : null,
@@ -58,7 +69,7 @@ function render() {
   const route = currentRoute();
   renderNav(route);
   clear(view);
-  route.render(view, route.id === 'import' ? navigate : render);
+  route.render(view, route.id === 'import' ? navigate : render, route.param);
 }
 
 window.addEventListener('hashchange', render);
