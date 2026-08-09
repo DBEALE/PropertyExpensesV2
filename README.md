@@ -95,6 +95,12 @@ obvious if the blank row is actually on screen. Categories this property never u
 rather than trailing an empty column down the page, and columns sort like everywhere else, so
 clicking *Repairs* ranks the months by what they cost.
 
+It carries the same date-range control as the Transactions tab — the shortcut dropdown plus the two
+dates — so a tax year is one click away. The year shortcuts here list only the years **this
+property** has transactions in, rather than every year in the file. The range applies to this table;
+the Cashflow chart above deliberately keeps showing the full history, so the trend stays visible
+while you read one year's figures.
+
 **Cashflow** — money in and out per month as stacked columns by category, on a single axis. Hover or
 keyboard-focus a block for its figure; past eight categories the smallest fold into a neutral
 "Other", and the breakdown table above still itemises every one.
@@ -259,7 +265,8 @@ uninvited — most hand edits are one-offs. Answer yes and the pre-filled editor
 
 ### Date ranges
 
-Every screen with a date filter — Transactions and Summary — has the same control: a shortcut
+Every screen with a date filter — Transactions, Summary, and the property Monthly breakdown — has
+the same control: a shortcut
 dropdown followed by the two dates it fills in. The dates stay visible and editable; the dropdown is
 a shortcut, not a replacement, and typing a range by hand flips it to **Custom range** so it never
 claims a range it isn't showing.

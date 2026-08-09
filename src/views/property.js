@@ -11,6 +11,7 @@ import { addMonths } from '../dates.js';
 import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { ANY, filterTransactions } from '../transaction-filter.js';
+import { dateRangeControls } from './date-filter.js';
 import { categoryFilter, transactionTable } from './transaction-table.js';
 import { slotClass } from '../palette.js';
 import {
@@ -36,6 +37,8 @@ const matrixSort = { key: 'month', dir: 'asc' };
 /** State for the read-only transaction list at the foot of the page. */
 const listSort = { key: 'date', dir: 'desc' };
 const listFilter = { category: ANY };
+/** Date range for the monthly breakdown table, kept across re-renders. */
+const breakdownRange = { from: '', to: '' };
 
 export function renderProperty(root, rerender, propertyId) {
   const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
@@ -285,16 +288,48 @@ function daysBetween(from, to) {
  * is actually on screen.
  */
 function renderMonthlyBreakdown(root, shares, categories, rerender) {
-  const months = monthlyTotals(shares);
+  // The year shortcuts are derived from this property's own transactions, so
+  // the list never offers a year this property has nothing in.
+  const dated = shares.map((s) => ({ date: s.transaction.date }));
+  const inRange = shares.filter(
+    (s) =>
+      (!breakdownRange.from || s.transaction.date >= breakdownRange.from) &&
+      (!breakdownRange.to || s.transaction.date <= breakdownRange.to),
+  );
+  const months = monthlyTotals(inRange);
 
-  root.append(el('h3', {}, 'Monthly breakdown'));
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Monthly breakdown'),
+      el('span', { class: 'count' }, `${months.length} month(s)`),
+    ),
+    el(
+      'div',
+      { class: 'filter-bar' },
+      ...dateRangeControls({
+        transactions: dated,
+        from: breakdownRange.from,
+        to: breakdownRange.to,
+        onChange: ({ from, to }) => {
+          breakdownRange.from = from;
+          breakdownRange.to = to;
+          rerender();
+        },
+      }),
+    ),
+    el('p', { class: 'hint' }, 'This range applies to the table below; the chart above shows the full history.'),
+  );
 
   if (months.length === 0) {
     root.append(
       el(
         'div',
         { class: 'empty' },
-        'Nothing categorised against this property yet. ',
+        shares.length === 0
+          ? 'Nothing categorised against this property yet. '
+          : 'No transactions for this property in that date range. ',
         el('a', { href: '#/transactions' }, 'Review transactions'),
       ),
     );
