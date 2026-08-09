@@ -1,9 +1,10 @@
 import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
-import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
+import { filterByDate } from '../dates.js';
 import { download, el, entityTag, money, sortableTh, toast } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { getState } from '../store.js';
+import { dateRangeControls } from './date-filter.js';
 import { slotClass } from '../palette.js';
 
 /** Range state lives outside render so it survives re-renders. */
@@ -13,50 +14,22 @@ const sort = { key: 'name', dir: 'asc' };
 export function renderSummary(root, rerender) {
   const { transactions, properties, categories } = getState();
   const visible = filterByDate(transactions, range.from, range.to);
-  const taxYears = [currentTaxYear(), currentTaxYear() - 1, currentTaxYear() - 2];
-
-  const dateInput = (which) =>
-    el('input', {
-      type: 'date',
-      value: range[which],
-      onchange: (event) => {
-        range[which] = event.target.value;
-        rerender();
-      },
-    });
 
   root.append(
+    el('div', { class: 'toolbar' }, el('h2', {}, 'Summary')),
     el(
       'div',
-      { class: 'toolbar' },
-      el('h2', {}, 'Summary'),
-      el('label', { class: 'inline' }, 'From ', dateInput('from')),
-      el('label', { class: 'inline' }, 'To ', dateInput('to')),
-      ...taxYears.map((year) =>
-        el(
-          'button',
-          {
-            onclick: () => {
-              const { from, to } = taxYearRange(year);
-              range.from = from;
-              range.to = to;
-              rerender();
-            },
-          },
-          `${year}/${String((year + 1) % 100).padStart(2, '0')}`,
-        ),
-      ),
-      el(
-        'button',
-        {
-          onclick: () => {
-            range.from = '';
-            range.to = '';
-            rerender();
-          },
+      { class: 'filter-bar' },
+      ...dateRangeControls({
+        transactions,
+        from: range.from,
+        to: range.to,
+        onChange: ({ from, to }) => {
+          range.from = from;
+          range.to = to;
+          rerender();
         },
-        'All dates',
-      ),
+      }),
     ),
     el(
       'p',

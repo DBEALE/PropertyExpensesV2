@@ -247,6 +247,55 @@ label.inline small {
   align-items: center;
 }
 
+/*
+ * The filter row. Everything on one line on a normal window: the controls are
+ * a size smaller than the page default, only the search box grows, and the
+ * date inputs are sized to their content rather than the browser's roomy
+ * default. It still wraps rather than overflowing when the window is small.
+ */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.filter-bar select,
+.filter-bar input,
+.filter-bar button {
+  font-size: 13px;
+  padding: 5px 7px;
+  min-width: 0;
+}
+
+.filter-bar input[type='search'] {
+  flex: 1 1 150px;
+}
+
+/* Capped so a long property name can't push the row onto a second line;
+   the full text is still there when the dropdown is open. */
+.filter-bar select {
+  flex: 0 1 auto;
+  max-width: 150px;
+  text-overflow: ellipsis;
+}
+
+.filter-bar .date-preset {
+  max-width: 165px;
+}
+
+/* A date input reserves room for its picker button; these hold two dates and
+   the dropdown in the space one comfortable select would take. */
+.filter-bar .date-bound {
+  flex: 0 0 auto;
+  width: 132px;
+}
+
+.filter-bar .clear-filters {
+  margin-left: auto;
+}
+
 .dropzone {
   padding: 28px;
   text-align: center;
@@ -274,7 +323,8 @@ table.data {
 table.data th,
 table.data td {
   text-align: left;
-  padding: 7px 10px;
+  /* Tight enough that eight columns of transaction fit a normal window. */
+  padding: 6px 8px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -350,6 +400,64 @@ table.data .num {
 table.data .details {
   max-width: 340px;
   overflow-wrap: anywhere;
+}
+
+/*
+ * Transactions column widths. Everything except Details is sized to its
+ * content so the row fits the page without sideways scrolling; Details takes
+ * whatever is left and wraps.
+ */
+.col-date {
+  width: 92px;
+}
+
+.col-type {
+  width: 120px;
+}
+
+.col-amount {
+  width: 104px;
+}
+
+.col-property {
+  width: 172px;
+}
+
+.col-category {
+  width: 148px;
+}
+
+.col-status {
+  width: 104px;
+}
+
+.col-actions {
+  width: 108px;
+}
+
+table.data td.details {
+  /* No fixed max here: this column absorbs the leftover width. */
+  max-width: none;
+  min-width: 160px;
+}
+
+/* Swatch and dropdown share the cell; the dropdown gives up width first. */
+.swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+table.data .actions button {
+  padding: 2px 4px;
+  font-size: 13px;
 }
 
 table.data td.in {

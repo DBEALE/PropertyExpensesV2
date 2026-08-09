@@ -279,10 +279,27 @@ reference varies between statements but the property name doesn't.
 Finishing a manual assignment **asks** whether you want a rule rather than opening the editor
 uninvited — most hand edits are one-offs. Answer yes and the pre-filled editor opens.
 
+### Date ranges
+
+Every screen with a date filter — Transactions, Summary, Accounts — has the same control: a shortcut
+dropdown followed by the two dates it fills in. The dates stay visible and editable; the dropdown is
+a shortcut, not a replacement, and typing a range by hand flips it to **Custom range** so it never
+claims a range it isn't showing.
+
+The shortcuts are:
+
+- **Quick ranges** — All dates, Last month, Last 3 months, Last 12 months (measured back from today);
+- **Tax years** — one per tax year your statements actually cover, written `2026/27`, running
+  6 April to 5 April;
+- **Calendar years** — one per calendar year your statements cover.
+
+Both year lists come from the imported data rather than a fixed span: offering 2019 to someone whose
+statements start in 2025 would just be a menu of empty results.
+
 ### Filtering
 
-The Transactions screen filters on text, **property**, **category**, status and a date range, all at
-once. **Clear filters** appears as soon as anything is narrowed.
+The Transactions screen filters on text, **property**, **category**, status and a date range, all on
+one line above the table. **Clear** appears as soon as anything is narrowed.
 
 A split transaction belongs to every property and category it was split across, so filtering by
 either one keeps it — and filtering by a property *and* a category together shows only the rows
@@ -468,6 +485,7 @@ src/
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
   responsive.js       card-mode cell labels and the mobile sort control
+  date-presets.js     tax-year / calendar-year / rolling date shortcuts
   transaction-filter.js  the filter predicates both screens share
   views/transaction-table.js  the table itself, editable or read-only
   charts.js           small SVG chart builders (columns, legend, table view)

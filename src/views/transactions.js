@@ -13,6 +13,7 @@ import {
   reapplyRules,
   updateTransaction,
 } from '../store.js';
+import { dateRangeControls } from './date-filter.js';
 import { openRuleEditor } from './rule-editor.js';
 import { categoryFilter, propertyFilter, transactionTable } from './transaction-table.js';
 
@@ -72,37 +73,14 @@ export function renderTransactions(root, rerender) {
     ].map(([value, label]) => el('option', { value, selected: filters.status === value }, label)),
   );
 
-  const dateInput = (which) =>
-    el('input', {
-      type: 'date',
-      value: filters[which],
-      onchange: (event) => {
-        filters[which] = event.target.value;
-        rerender();
-      },
-    });
-
   root.append(
+    // Heading and actions on their own line, so the filter bar below can hold
+    // every filter on one row without the title competing for the space.
     el(
       'div',
       { class: 'toolbar' },
       el('h2', {}, 'Transactions'),
       el('span', { class: 'count' }, `${visible.length} shown · ${needsReview} need review`),
-      search,
-      propertyFilter(filters.propertyId, (value) => {
-        filters.propertyId = value;
-        rerender();
-      }),
-      categoryFilter(filters.category, (value) => {
-        filters.category = value;
-        rerender();
-      }),
-      statusSelect,
-      el('label', { class: 'inline' }, 'From ', dateInput('from')),
-      el('label', { class: 'inline' }, 'To ', dateInput('to')),
-      isFiltered(filters)
-        ? el('button', { onclick: () => clearFilters(rerender) }, 'Clear filters')
-        : null,
       el(
         'button',
         {
@@ -116,6 +94,33 @@ export function renderTransactions(root, rerender) {
         },
         'Export CSV',
       ),
+    ),
+    el(
+      'div',
+      { class: 'filter-bar' },
+      search,
+      propertyFilter(filters.propertyId, (value) => {
+        filters.propertyId = value;
+        rerender();
+      }),
+      categoryFilter(filters.category, (value) => {
+        filters.category = value;
+        rerender();
+      }),
+      statusSelect,
+      ...dateRangeControls({
+        transactions,
+        from: filters.from,
+        to: filters.to,
+        onChange: ({ from, to }) => {
+          filters.from = from;
+          filters.to = to;
+          rerender();
+        },
+      }),
+      isFiltered(filters)
+        ? el('button', { class: 'clear-filters', onclick: () => clearFilters(rerender) }, 'Clear')
+        : null,
     ),
   );
 

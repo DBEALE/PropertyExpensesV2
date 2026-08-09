@@ -61,35 +61,43 @@ export function transactionTable(transactions, options) {
       el(
         'tr',
         {},
-        th('Date', 'date'),
-        th('Details', 'details'),
-        th('Type', 'type'),
-        th('Amount', 'amount', { class: 'num' }),
-        th('Property', 'property'),
-        th('Category', 'category'),
-        th('Status', 'status'),
-        readOnly ? null : el('th', {}, ''),
+        th('Date', 'date', { class: 'col-date' }),
+        th('Details', 'details', { class: 'col-details' }),
+        th('Type', 'type', { class: 'col-type' }),
+        th('Amount', 'amount', { class: 'num col-amount' }),
+        th('Property', 'property', { class: 'col-property' }),
+        th('Category', 'category', { class: 'col-category' }),
+        th('Status', 'status', { class: 'col-status' }),
+        readOnly ? null : el('th', { class: 'col-actions' }, ''),
       ),
     ),
     el('tbody', {}, ...rows.map((t) => (hasSplit(t) ? splitRow(t) : row(t)))),
   );
 
   function row(transaction) {
+    // The swatch and the dropdown sit in a flex wrapper rather than the cell
+    // itself: a `display: flex` on a <td> takes it out of the table layout and
+    // the columns stop lining up.
     const propertyCell = readOnly
       ? el('td', {}, tagFor(transaction.propertyId, transaction.category, 'property'))
       : el(
           'td',
-          { class: 'with-swatch' },
-          swatch(propertySlot(transaction.propertyId), propertyName(transaction.propertyId)),
+          {},
           el(
-            'select',
-            {
-              'aria-label': 'Property',
-              onchange: (event) => options.onAssign(transaction, { propertyId: event.target.value || null }),
-            },
-            el('option', { value: '' }, '— unassigned —'),
-            ...properties.map((p) =>
-              el('option', { value: p.id, selected: p.id === transaction.propertyId }, p.name),
+            'div',
+            { class: 'swatch-row' },
+            swatch(propertySlot(transaction.propertyId), propertyName(transaction.propertyId)),
+            el(
+              'select',
+              {
+                'aria-label': 'Property',
+                onchange: (event) =>
+                  options.onAssign(transaction, { propertyId: event.target.value || null }),
+              },
+              el('option', { value: '' }, '— unassigned —'),
+              ...properties.map((p) =>
+                el('option', { value: p.id, selected: p.id === transaction.propertyId }, p.name),
+              ),
             ),
           ),
         );
@@ -98,25 +106,29 @@ export function transactionTable(transactions, options) {
       ? el('td', {}, tagFor(transaction.propertyId, transaction.category, 'category'))
       : el(
           'td',
-          { class: 'with-swatch' },
-          swatch(categorySlot(transaction.category), categoryName(transaction.category)),
+          {},
           el(
-            'select',
-            {
-              'aria-label': 'Category',
-              onchange: (event) => {
-                const value = event.target.value;
-                options.onAssign(transaction, {
-                  category: isKnownCategory(value, categories) ? value : null,
-                });
+            'div',
+            { class: 'swatch-row' },
+            swatch(categorySlot(transaction.category), categoryName(transaction.category)),
+            el(
+              'select',
+              {
+                'aria-label': 'Category',
+                onchange: (event) => {
+                  const value = event.target.value;
+                  options.onAssign(transaction, {
+                    category: isKnownCategory(value, categories) ? value : null,
+                  });
+                },
               },
-            },
-            el('option', { value: '' }, '— unassigned —'),
-            ...categories.map((c) =>
-              el(
-                'option',
-                { value: c.id, selected: c.id === transaction.category, title: c.description },
-                c.name,
+              el('option', { value: '' }, '— unassigned —'),
+              ...categories.map((c) =>
+                el(
+                  'option',
+                  { value: c.id, selected: c.id === transaction.category, title: c.description },
+                  c.name,
+                ),
               ),
             ),
           ),

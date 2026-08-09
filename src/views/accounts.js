@@ -11,10 +11,11 @@ import {
 } from '../accounts.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME } from '../categories.js';
 import { capSeries, chartTable, legend, stackedColumns } from '../charts.js';
-import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
+import { filterByDate } from '../dates.js';
 import { el, entityTag, money, ukDate } from '../dom.js';
 import { toggleSort } from '../sort.js';
 import { ANY, filterTransactions } from '../transaction-filter.js';
+import { dateRangeControls } from './date-filter.js';
 import { categoryFilter, transactionTable } from './transaction-table.js';
 import { slotClass } from '../palette.js';
 import { categoryName, getState } from '../store.js';
@@ -58,49 +59,22 @@ export function renderAccounts(root, rerender) {
     ...options.map((o) => el('option', { value: o.id, selected: o.id === view.propertyId }, o.name)),
   );
 
-  const dateInput = (which) =>
-    el('input', {
-      type: 'date',
-      value: view[which],
-      onchange: (event) => {
-        view[which] = event.target.value;
-        rerender();
-      },
-    });
-
-  const taxYear = currentTaxYear();
-
   root.append(
+    el('div', { class: 'toolbar' }, el('h2', {}, 'Accounts')),
     el(
       'div',
-      { class: 'toolbar' },
-      el('h2', {}, 'Accounts'),
+      { class: 'filter-bar' },
       selector,
-      el('label', { class: 'inline' }, 'From ', dateInput('from')),
-      el('label', { class: 'inline' }, 'To ', dateInput('to')),
-      el(
-        'button',
-        {
-          onclick: () => {
-            const range = taxYearRange(taxYear);
-            view.from = range.from;
-            view.to = range.to;
-            rerender();
-          },
+      ...dateRangeControls({
+        transactions,
+        from: view.from,
+        to: view.to,
+        onChange: ({ from, to }) => {
+          view.from = from;
+          view.to = to;
+          rerender();
         },
-        `${taxYear}/${String((taxYear + 1) % 100).padStart(2, '0')}`,
-      ),
-      el(
-        'button',
-        {
-          onclick: () => {
-            view.from = '';
-            view.to = '';
-            rerender();
-          },
-        },
-        'All dates',
-      ),
+      }),
     ),
   );
 
