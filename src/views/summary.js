@@ -1,3 +1,4 @@
+import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { currentTaxYear, filterByDate, taxYearRange } from '../dates.js';
 import { download, el, money, toast } from '../dom.js';
 import { getState } from '../store.js';
@@ -62,7 +63,7 @@ export function renderSummary(root, rerender) {
     ),
   );
 
-  const unassigned = visible.filter((t) => t.propertyId === null || t.category === null);
+  const unassigned = visible.filter((t) => !isAssigned(t));
   if (unassigned.length > 0) {
     root.append(
       el(
@@ -80,22 +81,21 @@ export function renderSummary(root, rerender) {
     return;
   }
 
+  // Flatten to allocations once: a split transaction contributes one entry per
+  // property, a simple one contributes a single entry for its whole amount.
+  const shares = visible.flatMap((t) => allocationsOf(t));
+  // Summed in pence: adding many shares as floats drifts (0.1 + 0.2), and a
+  // tax return should not show £-30.160000000000004 in any export.
+  const sum = (list) => sumAllocations(list);
+
   const cellTotal = (propertyId, category) =>
-    visible
-      .filter((t) => t.propertyId === propertyId && t.category === category)
-      .reduce((sum, t) => sum + t.amount, 0);
+    sum(shares.filter((s) => s.propertyId === propertyId && s.category === category));
 
-  const columnTotal = (category) =>
-    visible.filter((t) => t.category === category).reduce((sum, t) => sum + t.amount, 0);
+  const columnTotal = (category) => sum(shares.filter((s) => s.category === category));
 
-  const rowTotal = (propertyId) =>
-    visible
-      .filter((t) => t.propertyId === propertyId && t.category !== null)
-      .reduce((sum, t) => sum + t.amount, 0);
+  const rowTotal = (propertyId) => sum(shares.filter((s) => s.propertyId === propertyId));
 
-  const grandTotal = visible
-    .filter((t) => t.propertyId !== null && t.category !== null)
-    .reduce((sum, t) => sum + t.amount, 0);
+  const grandTotal = sum(shares);
 
   root.append(
     el(

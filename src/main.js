@@ -1,3 +1,4 @@
+import { isAssigned } from './allocation.js';
 import { clear, el, toast } from './dom.js';
 import { getState, load, subscribe } from './store.js';
 import { renderBackup } from './views/backup.js';
@@ -34,7 +35,7 @@ function navigate(routeId) {
 
 function renderNav(active) {
   clear(nav);
-  const needsReview = getState().transactions.filter((t) => t.propertyId === null || t.category === null).length;
+  const needsReview = getState().transactions.filter((t) => !isAssigned(t)).length;
   for (const route of ROUTES) {
     nav.append(
       el(

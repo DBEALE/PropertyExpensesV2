@@ -1,3 +1,4 @@
+import { hasSplit } from '../allocation.js';
 import { el, money, toast } from '../dom.js';
 import { countMatches, hasAmount, hasText, hasType, orderRules } from '../rules.js';
 import { deleteRule, getState, propertyName, reapplyRules } from '../store.js';
@@ -111,8 +112,21 @@ export function renderRules(root, rerender) {
                 ? el('span', { class: 'badge badge-pin' }, money(rule.amountEquals))
                 : el('span', { class: 'unset' }, 'any'),
             ),
-            el('td', {}, propertyName(rule.propertyId)),
-            el('td', {}, rule.category),
+            hasSplit(rule)
+              ? el(
+                  'td',
+                  { colspan: 2, class: 'split-cell' },
+                  el('span', { class: 'badge badge-split' }, `Split ${rule.allocations.length}`),
+                  ...rule.allocations.map((a) =>
+                    el(
+                      'div',
+                      { class: 'share' },
+                      `${propertyName(a.propertyId)} · ${a.category} · ${money(a.amount)}`,
+                    ),
+                  ),
+                )
+              : el('td', {}, propertyName(rule.propertyId)),
+            hasSplit(rule) ? null : el('td', {}, rule.category),
             el('td', { class: 'num' }, String(counts.get(rule.id) ?? 0)),
             el(
               'td',
@@ -149,5 +163,6 @@ function describe(rule) {
   if (hasText(rule)) parts.push(`Details ${rule.matchType} "${rule.matchText}"`);
   if (hasType(rule)) parts.push(`Type is "${rule.transactionTypeEquals}"`);
   if (hasAmount(rule)) parts.push(`Amount is ${money(rule.amountEquals)}`);
+  if (hasSplit(rule)) parts.push(`Splits across ${rule.allocations.length} properties`);
   return parts.join('\n');
 }

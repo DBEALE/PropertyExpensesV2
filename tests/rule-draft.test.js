@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { draftRuleFromTransaction, draftToRule, suggestMatchText, validateDraft } from '../src/rule-draft.js';
+import {
+  candidateWords,
+  draftRuleFromTransaction,
+  draftToRule,
+  suggestMatchText,
+  validateDraft,
+} from '../src/rule-draft.js';
 import { findMatchingRule } from '../src/rules.js';
 import { rule } from './fixtures.js';
 
@@ -18,6 +24,21 @@ const TENANT = {
   importedAt: '2026-08-01T00:00:00.000Z',
 };
 
+describe('candidateWords', () => {
+  it('offers the description\'s words, longest first, without duplicates', () => {
+    assert.deepEqual(candidateWords('S Agyapong 3 PETERBOROUGH GAT'), ['PETERBOROUGH', 'Agyapong']);
+  });
+
+  it('strips surrounding punctuation', () => {
+    assert.deepEqual(candidateWords('PAYMENT (PETERBOROUGH),'), ['PETERBOROUGH']);
+  });
+
+  it('is empty when there is nothing worth narrowing to', () => {
+    assert.deepEqual(candidateWords('ABC 12'), []);
+    assert.deepEqual(candidateWords(''), []);
+  });
+});
+
 describe('suggestMatchText', () => {
   it('picks the longest identifying word', () => {
     assert.equal(suggestMatchText('S Agyapong 3 PETERBOROUGH GAT'), 'PETERBOROUGH');
@@ -32,17 +53,23 @@ describe('suggestMatchText', () => {
     assert.equal(suggestMatchText('ABC 12'), 'ABC 12');
     assert.equal(suggestMatchText(''), '');
   });
-
-  it('strips surrounding punctuation', () => {
-    assert.equal(suggestMatchText('PAYMENT (PETERBOROUGH),'), 'PETERBOROUGH');
-  });
 });
 
 describe('draftRuleFromTransaction', () => {
-  it('pre-fills every field from the transaction, with text on and the rest off', () => {
+  it('pre-fills the match text with the full description', () => {
+    const draft = draftRuleFromTransaction(TENANT, []);
+    assert.equal(draft.matchText, 'S Agyapong 3 PETERBOROUGH GAT');
+    // The keyword is offered as a one-click narrowing rather than imposed.
+    assert.deepEqual(draft.suggestions, ['PETERBOROUGH', 'Agyapong']);
+  });
+
+  it('trims surrounding whitespace from the description', () => {
+    assert.equal(draftRuleFromTransaction({ ...TENANT, details: '  SPACED OUT  ' }, []).matchText, 'SPACED OUT');
+  });
+
+  it('pre-fills every other field from the transaction, with text on and the rest off', () => {
     const draft = draftRuleFromTransaction(TENANT, []);
     assert.equal(draft.useText, true);
-    assert.equal(draft.matchText, 'PETERBOROUGH');
     assert.equal(draft.matchType, 'contains');
     // Type and amount are pre-filled but unticked, ready to be turned on.
     assert.equal(draft.useType, false);
@@ -53,7 +80,7 @@ describe('draftRuleFromTransaction', () => {
     assert.equal(draft.category, 'Rent');
   });
 
-  it('ticks the amount when the text already belongs to another property', () => {
+  it('ticks the amount when another property already claims this description', () => {
     const existing = [rule({ id: 'r1', matchText: 'PETERBOROUGH', propertyId: 'propB', category: 'Rent' })];
     const draft = draftRuleFromTransaction(TENANT, existing);
     assert.equal(draft.useAmount, true);
@@ -64,13 +91,20 @@ describe('draftRuleFromTransaction', () => {
     const existing = [rule({ id: 'r1', matchText: 'PETERBOROUGH', propertyId: 'propA', category: 'Rent' })];
     assert.equal(draftRuleFromTransaction(TENANT, existing).useAmount, false);
   });
+
+  it('detects a collision even when the existing rule is broader than the description', () => {
+    // The full description no longer equals the other rule's text, so this only
+    // works because collision is tested by matching, not string comparison.
+    const existing = [rule({ id: 'r1', matchText: 'Agyapong', propertyId: 'propB', category: 'Rent' })];
+    assert.equal(draftRuleFromTransaction(TENANT, existing).useAmount, true);
+  });
 });
 
 describe('draftToRule', () => {
   it('drops unticked conditions rather than storing empty ones', () => {
     const draft = draftRuleFromTransaction(TENANT, []);
     const built = draftToRule(draft, 'r1');
-    assert.equal(built.matchText, 'PETERBOROUGH');
+    assert.equal(built.matchText, 'S Agyapong 3 PETERBOROUGH GAT');
     assert.equal('transactionTypeEquals' in built, false);
     assert.equal('amountEquals' in built, false);
   });

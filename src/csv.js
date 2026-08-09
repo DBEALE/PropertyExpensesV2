@@ -1,3 +1,5 @@
+import { allocationsOf } from './allocation.js';
+
 export class CsvFormatError extends Error {}
 
 const REQUIRED_COLUMNS = ['Date', 'Details', 'Transaction Type', 'In', 'Out'];
@@ -166,27 +168,39 @@ function toUkDate(iso) {
 }
 
 /**
- * Renders categorized transactions back to CSV, with Property/Category appended.
+ * Renders categorized transactions back to CSV, with Property/Category
+ * appended.
+ *
+ * A transaction split across properties becomes one row per share, each
+ * carrying its own In/Out amount, so the column totals still reconcile in
+ * Excel. Balance is written only on the first row of a split, since a running
+ * balance belongs to the transaction, not to a share of it.
+ *
  * @param {import('./types.js').Transaction[]} transactions
  * @param {(id: string|null) => string} propertyName
  */
 export function toCsv(transactions, propertyName) {
   const lines = [CSV_EXPORT_COLUMNS.join(',')];
   for (const t of transactions) {
-    lines.push(
-      [
-        toUkDate(t.date),
-        t.details,
-        t.transactionType,
-        t.amount > 0 ? t.amount.toFixed(2) : '',
-        t.amount < 0 ? Math.abs(t.amount).toFixed(2) : '',
-        t.balance === null ? '' : t.balance.toFixed(2),
-        propertyName(t.propertyId),
-        t.category ?? '',
-      ]
-        .map(escapeCsv)
-        .join(','),
-    );
+    const shares = allocationsOf(t);
+    // An uncategorised transaction still exports, with blank property/category.
+    const rows = shares.length > 0 ? shares : [{ propertyId: null, category: '', amount: t.amount }];
+    rows.forEach((share, i) => {
+      lines.push(
+        [
+          toUkDate(t.date),
+          t.details,
+          t.transactionType,
+          share.amount > 0 ? share.amount.toFixed(2) : '',
+          share.amount < 0 ? Math.abs(share.amount).toFixed(2) : '',
+          i === 0 && t.balance !== null ? t.balance.toFixed(2) : '',
+          propertyName(share.propertyId),
+          share.category ?? '',
+        ]
+          .map(escapeCsv)
+          .join(','),
+      );
+    });
   }
   return lines.join('\r\n');
 }

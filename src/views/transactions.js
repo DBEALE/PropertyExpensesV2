@@ -1,3 +1,4 @@
+import { hasSplit, isAssigned } from '../allocation.js';
 import { toCsv } from '../csv.js';
 import { download, el, money, toast, ukDate } from '../dom.js';
 import { filterByDate } from '../dates.js';
@@ -28,10 +29,11 @@ export function renderTransactions(root, rerender) {
     const needle = filters.text.toLowerCase();
     visible = visible.filter((t) => t.details.toLowerCase().includes(needle));
   }
-  if (filters.status === 'review') visible = visible.filter((t) => t.propertyId === null || t.category === null);
+  if (filters.status === 'review') visible = visible.filter((t) => !isAssigned(t));
   if (filters.status === 'auto') visible = visible.filter((t) => t.matchedRuleId !== null);
+  if (filters.status === 'split') visible = visible.filter((t) => hasSplit(t));
 
-  const needsReview = transactions.filter((t) => t.propertyId === null || t.category === null).length;
+  const needsReview = transactions.filter((t) => !isAssigned(t)).length;
 
   const search = el('input', {
     type: 'search',
@@ -62,6 +64,7 @@ export function renderTransactions(root, rerender) {
       ['all', 'All transactions'],
       ['review', 'Needs review'],
       ['auto', 'Auto-categorised'],
+      ['split', 'Split'],
     ].map(([value, label]) => el('option', { value, selected: filters.status === value }, label)),
   );
 
@@ -133,7 +136,11 @@ export function renderTransactions(root, rerender) {
   );
 
   function row(transaction) {
-    const assigned = transaction.propertyId !== null && transaction.category !== null;
+    const assigned = isAssigned(transaction);
+
+    // A split transaction shows its shares instead of the two dropdowns —
+    // editing it means editing the rule that split it.
+    if (hasSplit(transaction)) return splitRow(transaction);
 
     const propertySelect = el(
       'select',
@@ -203,6 +210,75 @@ export function renderTransactions(root, rerender) {
     );
   }
 
+  /** A transaction split across properties: one line per share. */
+  function splitRow(transaction) {
+    const shares = transaction.allocations;
+    const cell = (render) =>
+      el('td', {}, ...shares.map((share) => el('div', { class: 'share' }, render(share))));
+
+    return el(
+      'tr',
+      { class: 'row-split' },
+      el('td', {}, ukDate(transaction.date)),
+      el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
+      el('td', {}, transaction.transactionType),
+      el(
+        'td',
+        { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` },
+        money(transaction.amount),
+        el('div', { class: 'share-amounts' }, ...shares.map((s) => el('div', { class: 'share' }, money(s.amount)))),
+      ),
+      cell((share) => propertyName(share.propertyId)),
+      cell((share) => share.category),
+      el(
+        'td',
+        {},
+        el(
+          'span',
+          { class: 'badge badge-split', title: describeSplit(transaction) },
+          `Split ${shares.length}`,
+        ),
+      ),
+      el(
+        'td',
+        { class: 'actions' },
+        el(
+          'button',
+          {
+            class: 'link',
+            title: 'Edit the rule that splits this transaction',
+            onclick: () => {
+              const rule = rules.find((r) => r.id === transaction.matchedRuleId);
+              if (rule) {
+                openRuleEditor({ rule, onSaved: () => void reapplyRules().then(rerender) });
+              } else {
+                createRuleFrom(transaction);
+              }
+            },
+          },
+          'Rule',
+        ),
+        el(
+          'button',
+          {
+            class: 'link danger',
+            onclick: () => {
+              if (!confirm('Delete this transaction?')) return;
+              void deleteTransaction(transaction.id).then(rerender);
+            },
+          },
+          'Delete',
+        ),
+      ),
+    );
+  }
+
+  function describeSplit(transaction) {
+    return transaction.allocations
+      .map((s) => `${propertyName(s.propertyId)} · ${s.category} · ${money(s.amount)}`)
+      .join('\n');
+  }
+
   function ruleLabel(ruleId) {
     const rule = rules.find((r) => r.id === ruleId);
     return rule ? describeRule(rule, money) : 'Rule no longer exists';
@@ -222,8 +298,10 @@ export function renderTransactions(root, rerender) {
 
   /** @param {Partial<import('../types.js').Transaction>} change */
   async function assign(transaction, change) {
-    // A hand-edited row is no longer owned by whatever rule first claimed it.
-    const next = { ...transaction, ...change, matchedRuleId: null };
+    // A hand-edited row is no longer owned by whatever rule first claimed it,
+    // and a manual single assignment replaces any split it used to carry.
+    const { allocations, ...rest } = transaction;
+    const next = { ...rest, ...change, matchedRuleId: null };
     await updateTransaction(next);
     rerender();
     // Once both fields are set, offer to remember it — non-blocking, and the

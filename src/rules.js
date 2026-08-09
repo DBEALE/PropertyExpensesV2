@@ -119,19 +119,19 @@ export function countMatches(rules, transactions) {
 }
 
 /**
- * True when the same matchText is already used by a rule pointing at a
- * different property — the signal that this payee is shared and the new rule
- * needs another condition to disambiguate.
+ * True when an existing rule's text already claims this transaction on behalf
+ * of a different property — the signal that this payee is shared and the new
+ * rule needs another condition to stay distinct.
  *
- * @param {string} matchText
- * @param {string} propertyId
+ * Tested by matching rather than by comparing match text, so it also catches a
+ * broad rule ("NATWEST") shadowing a specific description.
+ *
+ * @param {{details?: string, propertyId?: string|null}} transaction
  * @param {import('./types.js').Rule[]} rules
  */
-export function shouldSuggestAmountPin(matchText, propertyId, rules) {
-  const needle = (matchText ?? '').trim().toLowerCase();
-  if (needle === '') return false;
+export function collidesWithOtherProperty(transaction, rules) {
   return rules.some(
-    (r) => hasText(r) && r.matchText.trim().toLowerCase() === needle && r.propertyId !== propertyId,
+    (r) => hasText(r) && matchesText(r, transaction.details) && r.propertyId !== transaction.propertyId,
   );
 }
 

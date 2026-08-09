@@ -1,3 +1,4 @@
+import { hasSplit } from './allocation.js';
 import * as db from './db.js';
 import { recategorise } from './importer.js';
 import { validateBackup } from './backup.js';
@@ -46,15 +47,29 @@ export async function saveProperty(property) {
 
 export async function deleteProperty(id) {
   await db.remove('properties', id);
-  // Detach the property from anything referencing it, so no dangling ids remain.
-  for (const rule of state.rules.filter((r) => r.propertyId === id)) {
+  // Detach the property from anything referencing it, so no dangling ids
+  // remain — including rules and transactions that only mention it in a split.
+  for (const rule of state.rules.filter((r) => referencesProperty(r, id))) {
     await db.remove('rules', rule.id);
   }
-  const touched = state.transactions
-    .filter((t) => t.propertyId === id)
-    .map((t) => ({ ...t, propertyId: null, category: null, matchedRuleId: null }));
+  const touched = state.transactions.filter((t) => referencesProperty(t, id)).map(unassign);
   if (touched.length > 0) await db.putMany('transactions', touched);
   await load();
+}
+
+function referencesProperty(record, propertyId) {
+  if (record.propertyId === propertyId) return true;
+  return hasSplit(record) && record.allocations.some((a) => a.propertyId === propertyId);
+}
+
+/**
+ * Clears an assignment entirely. A split loses every share, not just the one
+ * naming the deleted property — dropping a single share would leave the rest
+ * no longer summing to the transaction total.
+ */
+function unassign(transaction) {
+  const { allocations, ...rest } = transaction;
+  return { ...rest, propertyId: null, category: null, matchedRuleId: null };
 }
 
 // --- Rules --------------------------------------------------------------

@@ -19,6 +19,8 @@ third-party service.
   amount, and auto-fill Property and Category on import.
 - **One-click rules from a transaction** — click **Rule** on any row to open an editor pre-filled
   from it, with a live count of how many transactions the rule would claim.
+- **Split across properties** — a rule can divide one transaction between several properties (and
+  categories) by exact amounts, with the shares required to total the transaction to the penny.
 - **Rule management** — add, edit and delete rules; see the conditions each one sets, how many
   transactions it currently claims, and the order they are evaluated in.
 - **Properties** — add, rename and delete. Categories are the fixed five: Rent, Ins, Repairs,
@@ -66,13 +68,16 @@ least one condition is required — a rule with none would match everything, and
 ### Creating a rule from a transaction
 
 The fastest route. On the **Transactions** tab, click **Rule** on any row. The editor opens
-pre-filled from that transaction — suggested match text, its Transaction Type, its exact amount, and
-its current property and category. Tick whichever conditions you want and save. A live counter shows
-how many of your stored transactions the rule would claim before you commit, and the rule is applied
-to existing transactions immediately.
+pre-filled from that transaction — the **full `Details` text**, its Transaction Type, its exact
+amount, and its current property and category. Tick whichever conditions you want and save. A live
+counter shows how many of your stored transactions the rule would claim before you commit, and the
+rule is applied to existing transactions immediately.
 
-The suggested match text is the longest informative word in the description, skipping generic banking
-noise like `BANK`, `DIRECT`, `DEBIT` — so `S Agyapong 3 PETERBOROUGH GAT` suggests `PETERBOROUGH`.
+Match text defaults to the whole description so nothing from the row is lost. Under the box,
+**Narrow to:** offers each informative word as a one-click shortcut (skipping banking noise like
+`BANK`, `DIRECT`, `DEBIT`), plus a way back to the full description. For
+`S Agyapong 3 PETERBOROUGH GAT` that means one click to `PETERBOROUGH` — useful when the tenant
+reference varies between statements but the property name doesn't.
 
 Assigning both Property and Category by hand on an uncategorised row opens the same editor
 automatically, so the common case is one click.
@@ -94,9 +99,42 @@ billing several properties under one name:
 A `NATWEST BANK` payment of £428.06 goes to Property A, £512.40 goes to Property B, and any other
 amount is left **unassigned for manual review** rather than being guessed at.
 
-When you build a rule from a transaction whose suggested text is already used by a *different*
-property, the Amount condition is ticked for you and the editor says why — that collision is the
-signal the payee is shared and needs pinning.
+When you build a rule from a transaction that an existing rule *for a different property* already
+claims, the Amount condition is ticked for you and the editor says why — that collision is the signal
+the payee is shared and needs pinning.
+
+### Splitting one transaction across properties
+
+Some payments cover more than one property — a single insurance direct debit, a shared service
+charge. Tick **Split across properties** in the rule editor and enter the exact share each property
+takes. Each row has its own property, category and amount, so a split can spread across categories
+too, not just properties.
+
+The editor will not let you save until the shares total the transaction exactly. A running
+**Allocated £x of £y** line shows where you are; **Split evenly** divides the total and gives any odd
+penny to the first row so the parts always reconcile.
+
+**A split rule must be pinned to an exact amount.** Shares are fixed pounds and pence, so the rule
+needs a known total to divide — ticking Split turns Amount on and locks it. If the same payee bills
+you a *different* amount next month, that transaction won't match, and lands in Needs review where
+you can build a second rule for it.
+
+Split transactions are shown in the Transactions table with a **Split** badge and one line per share
+(filter the status dropdown to **Split** to see them all). Editing one means editing the rule that
+split it — the **Rule** button on a split row opens that rule directly. Assigning a Property or
+Category by hand on a split row replaces the split with a single simple assignment.
+
+Downstream, a split behaves as its parts:
+
+- the **Summary** credits each property only its own share, and column totals are summed in whole
+  pence so nothing drifts;
+- the **CSV export** writes one row per share, each with its own In/Out amount, with `Balance` on the
+  first row only — a running balance belongs to the transaction, not to a share of it;
+- **backups** carry the allocations, and a restore is rejected if any split fails to sum to its
+  transaction, rather than being silently repaired.
+
+Deleting a property removes rules that reference it *and* unassigns transactions that mention it in a
+split — the whole split, not just that share, since the remainder would no longer add up.
 
 "Re-apply to all transactions" on the Rules page re-runs the engine over stored transactions.
 Rows you assigned by hand are left alone; rows a rule assigned are updated, or cleared if no rule
@@ -165,6 +203,7 @@ src/
   csv.js              CSV parsing/export, UK date and amount handling
   rules.js            rule conditions, matching and specificity ordering
   rule-draft.js       pre-fill and validation for the rule editor
+  allocation.js       splitting a transaction across properties, in whole pence
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB
   db.js               IndexedDB wrapper

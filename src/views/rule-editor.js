@@ -1,3 +1,4 @@
+import { hasSplit, splitEvenly, sumAllocations } from '../allocation.js';
 import { newId } from '../db.js';
 import { el, money, toast } from '../dom.js';
 import { draftRuleFromTransaction, draftToRule, validateDraft } from '../rule-draft.js';
@@ -20,6 +21,8 @@ function draftFromRule(rule) {
     propertyId: rule.propertyId,
     category: rule.category,
     collides: false,
+    split: hasSplit(rule),
+    allocations: hasSplit(rule) ? rule.allocations.map((a) => ({ ...a })) : [],
   };
 }
 
@@ -44,12 +47,45 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
 
   // --- condition: details text -----------------------------------------
   const useText = el('input', { type: 'checkbox', checked: draft.useText, onchange: sync });
-  const matchText = el('input', { type: 'text', value: draft.matchText, placeholder: 'e.g. PETERBOROUGH', oninput: sync });
+  const matchText = el('input', {
+    type: 'text',
+    value: draft.matchText,
+    placeholder: 'e.g. PETERBOROUGH',
+    oninput: sync,
+  });
   const matchType = el(
     'select',
     { onchange: sync },
     ...MATCH_TYPES.map((t) => el('option', { value: t, selected: t === draft.matchType }, t)),
   );
+
+  /** Sets the text box and refreshes everything that depends on it. */
+  function setMatchText(value) {
+    matchText.value = value;
+    useText.checked = true;
+    sync();
+    matchText.focus();
+  }
+
+  // The box starts with the whole description; these narrow it in one click.
+  const fullText = (draft.matchText ?? '').trim();
+  const narrowings = (draft.suggestions ?? []).filter((w) => w !== fullText);
+  const suggestions =
+    narrowings.length > 0
+      ? el(
+          'div',
+          { class: 'suggestions' },
+          el('span', { class: 'hint' }, 'Narrow to:'),
+          ...narrowings.slice(0, 6).map((word) =>
+            el('button', { type: 'button', class: 'chip-button', onclick: () => setMatchText(word) }, word),
+          ),
+          el(
+            'button',
+            { type: 'button', class: 'chip-button', onclick: () => setMatchText(fullText) },
+            'full description',
+          ),
+        )
+      : null;
 
   // --- condition: transaction type -------------------------------------
   const useType = el('input', { type: 'checkbox', checked: draft.useType, onchange: sync });
@@ -84,6 +120,136 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
     ...CATEGORIES.map((c) => el('option', { value: c, selected: c === draft.category }, c)),
   );
 
+  // --- outcome: split across properties ---------------------------------
+  /** Working copy of the split rows; the DOM is rebuilt from this. */
+  let allocations = draft.allocations.map((a) => ({ ...a }));
+
+  const split = el('input', {
+    type: 'checkbox',
+    checked: draft.split,
+    onchange: () => {
+      if (split.checked && allocations.length === 0) allocations = seedAllocations();
+      renderAllocations();
+      sync();
+    },
+  });
+
+  const allocationRows = el('div', { class: 'allocation-rows' });
+  const remainder = el('p', { class: 'remainder' });
+
+  /** Two rows splitting the pinned amount evenly, as a starting point. */
+  function seedAllocations() {
+    const total = Number(amountValue.value) || 0;
+    const halves = splitEvenly(total, 2);
+    return halves.map((amount, i) => ({
+      propertyId: properties[Math.min(i, properties.length - 1)].id,
+      category: draft.category ?? CATEGORIES[0],
+      amount,
+    }));
+  }
+
+  function renderAllocations() {
+    allocationRows.replaceChildren();
+    if (!split.checked) return;
+
+    allocations.forEach((allocation, index) => {
+      const propertySelect = el(
+        'select',
+        {
+          'aria-label': `Property for share ${index + 1}`,
+          onchange: (event) => {
+            allocations[index].propertyId = event.target.value;
+            sync();
+          },
+        },
+        ...properties.map((p) =>
+          el('option', { value: p.id, selected: p.id === allocation.propertyId }, p.name),
+        ),
+      );
+      const categorySelect = el(
+        'select',
+        {
+          'aria-label': `Category for share ${index + 1}`,
+          onchange: (event) => {
+            allocations[index].category = event.target.value;
+            sync();
+          },
+        },
+        ...CATEGORIES.map((c) => el('option', { value: c, selected: c === allocation.category }, c)),
+      );
+      const amountInput = el('input', {
+        type: 'number',
+        step: '0.01',
+        class: 'allocation-amount',
+        'aria-label': `Amount for share ${index + 1}`,
+        value: String(allocation.amount),
+        oninput: (event) => {
+          allocations[index].amount = event.target.value;
+          sync();
+        },
+      });
+
+      allocationRows.append(
+        el(
+          'div',
+          { class: 'allocation-row' },
+          propertySelect,
+          categorySelect,
+          amountInput,
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'link danger',
+              'aria-label': `Remove share ${index + 1}`,
+              disabled: allocations.length <= 2,
+              onclick: () => {
+                allocations.splice(index, 1);
+                renderAllocations();
+                sync();
+              },
+            },
+            'Remove',
+          ),
+        ),
+      );
+    });
+
+    allocationRows.append(
+      el(
+        'div',
+        { class: 'allocation-actions' },
+        el(
+          'button',
+          {
+            type: 'button',
+            onclick: () => {
+              // New rows start at zero so the user states the value explicitly.
+              allocations.push({ propertyId: properties[0].id, category: CATEGORIES[0], amount: 0 });
+              renderAllocations();
+              sync();
+            },
+          },
+          'Add property',
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            onclick: () => {
+              const even = splitEvenly(Number(amountValue.value) || 0, allocations.length);
+              allocations = allocations.map((a, i) => ({ ...a, amount: even[i] }));
+              renderAllocations();
+              sync();
+            },
+          },
+          'Split evenly',
+        ),
+        remainder,
+      ),
+    );
+  }
+
   const preview = el('p', { class: 'rule-preview' });
   const problem = el('p', { class: 'rule-problem' });
   const saveButton = el('button', { class: 'primary', type: 'submit' }, rule ? 'Save rule' : 'Create rule');
@@ -100,6 +266,8 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
       amountEquals: amountValue.value,
       propertyId: property.value,
       category: category.value,
+      split: split.checked,
+      allocations,
     };
   }
 
@@ -110,6 +278,22 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
     matchType.disabled = !current.useText;
     typeValue.disabled = !current.useType;
     amountValue.disabled = !current.useAmount;
+    // A split needs a fixed total to reconcile against, so pin the amount.
+    if (current.split && !useAmount.checked) {
+      useAmount.checked = true;
+      amountValue.disabled = false;
+      current.useAmount = true;
+    }
+    useAmount.disabled = current.split;
+    property.disabled = current.split;
+    category.disabled = current.split;
+
+    if (current.split) {
+      const total = Number(current.amountEquals) || 0;
+      const allocated = sumAllocations(allocations);
+      remainder.textContent = `Allocated ${money(allocated)} of ${money(total)}`;
+      remainder.className = `remainder ${Math.round((total - allocated) * 100) === 0 ? 'ok' : 'off'}`;
+    }
 
     const error = validateDraft(current);
     problem.textContent = error ?? '';
@@ -167,6 +351,7 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
         matchType,
         matchText,
       ),
+      suggestions,
       el(
         'div',
         { class: 'condition' },
@@ -200,6 +385,13 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
         property,
         category,
       ),
+      el(
+        'div',
+        { class: 'condition' },
+        el('label', { class: 'inline' }, split, ' Split across properties'),
+        el('small', {}, 'shares must total the pinned amount exactly'),
+      ),
+      allocationRows,
 
       preview,
       problem,
@@ -215,8 +407,11 @@ export function openRuleEditor({ transaction, rule, onSaved }) {
   // Clean up so repeated opens don't pile up detached dialogs.
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
+  renderAllocations();
   sync();
   dialog.showModal();
+  // Focus without selecting: the box holds the full description, and a stray
+  // keystroke shouldn't wipe it.
   matchText.focus();
-  matchText.select();
+  matchText.setSelectionRange(matchText.value.length, matchText.value.length);
 }

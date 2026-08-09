@@ -7,6 +7,11 @@
  *
  * @typedef {{ id: string, name: string }} Property
  *
+ * @typedef {object} Allocation A share of one transaction.
+ * @property {string} propertyId
+ * @property {Category} category
+ * @property {number} amount Signed, same sign as the transaction it splits.
+ *
  * @typedef {object} Rule
  * @property {string} id
  * @property {string} matchText
@@ -16,8 +21,10 @@
  * @property {string} [transactionTypeEquals] Only matches transactions with
  *   this Transaction Type (case-insensitive). Narrows a payee that appears as
  *   both, say, a Direct Debit and a Card Payment.
- * @property {string} propertyId
- * @property {Category} category
+ * @property {string} propertyId Ignored when `allocations` is set.
+ * @property {Category} category Ignored when `allocations` is set.
+ * @property {Allocation[]} [allocations] Splits the transaction across
+ *   properties. Requires `amountEquals`, and must sum to it exactly.
  *
  * @typedef {object} Transaction
  * @property {string} id
@@ -26,8 +33,10 @@
  * @property {string} transactionType
  * @property {number} amount Signed: positive for In, negative for Out.
  * @property {number|null} balance
- * @property {string|null} propertyId
- * @property {Category|null} category
+ * @property {string|null} propertyId Null when split or unassigned.
+ * @property {Category|null} category Null when split or unassigned.
+ * @property {Allocation[]} [allocations] Set when split across properties;
+ *   sums to `amount` exactly. Mutually exclusive with propertyId/category.
  * @property {string|null} matchedRuleId Rule that auto-assigned this, if any.
  * @property {string} sourceFilename
  * @property {string} importedAt

@@ -1,3 +1,4 @@
+import { hasSplit } from '../allocation.js';
 import { CsvFormatError } from '../csv.js';
 import { newId } from '../db.js';
 import { el, money, toast, ukDate } from '../dom.js';
@@ -127,8 +128,21 @@ export function renderImport(root, navigate) {
             el('td', { class: 'details' }, transaction.details),
             el('td', {}, transaction.transactionType),
             el('td', { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` }, money(transaction.amount)),
-            el('td', {}, propertyName(transaction.propertyId)),
-            el('td', {}, transaction.category ?? ''),
+            hasSplit(transaction)
+              ? el(
+                  'td',
+                  { colspan: 2 },
+                  el('span', { class: 'badge badge-split' }, `Split ${transaction.allocations.length}`),
+                  ...transaction.allocations.map((a) =>
+                    el(
+                      'div',
+                      { class: 'share' },
+                      `${propertyName(a.propertyId)} · ${a.category} · ${money(a.amount)}`,
+                    ),
+                  ),
+                )
+              : el('td', {}, propertyName(transaction.propertyId)),
+            hasSplit(transaction) ? null : el('td', {}, transaction.category ?? ''),
             el(
               'td',
               {},

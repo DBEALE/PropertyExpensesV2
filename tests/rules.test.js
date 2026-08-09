@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { parseStatement } from '../src/csv.js';
 import {
+  collidesWithOtherProperty,
   countMatches,
   describeRule,
   findMatchingRule,
   matchesText,
-  shouldSuggestAmountPin,
 } from '../src/rules.js';
 import { FIXTURE, rule } from './fixtures.js';
 
@@ -173,15 +173,20 @@ describe('countMatches', () => {
   });
 });
 
-describe('shouldSuggestAmountPin', () => {
-  const existing = [rule({ id: 'a', matchText: 'NATWEST BANK', propertyId: 'propA' })];
+describe('collidesWithOtherProperty', () => {
+  const existing = [rule({ id: 'a', matchText: 'NATWEST', propertyId: 'propA' })];
 
-  it('suggests pinning when the same text already points at another property', () => {
-    assert.equal(shouldSuggestAmountPin('natwest bank', 'propB', existing), true);
+  it('flags a description another property already claims', () => {
+    assert.equal(collidesWithOtherProperty({ details: 'NATWEST BANK', propertyId: 'propB' }, existing), true);
   });
 
-  it('does not suggest pinning for the same property or a new payee', () => {
-    assert.equal(shouldSuggestAmountPin('NATWEST BANK', 'propA', existing), false);
-    assert.equal(shouldSuggestAmountPin('PETERBOROUGH', 'propB', existing), false);
+  it('does not flag the same property, or a payee no rule covers', () => {
+    assert.equal(collidesWithOtherProperty({ details: 'NATWEST BANK', propertyId: 'propA' }, existing), false);
+    assert.equal(collidesWithOtherProperty({ details: 'PETERBOROUGH', propertyId: 'propB' }, existing), false);
+  });
+
+  it('ignores rules that set no text condition', () => {
+    const amountOnly = [rule({ id: 'a', matchText: '', propertyId: 'propA', amountEquals: -1 })];
+    assert.equal(collidesWithOtherProperty({ details: 'ANYTHING', propertyId: 'propB' }, amountOnly), false);
   });
 });
