@@ -6,12 +6,6 @@ export function taxYearRange(startYear) {
   return { from: `${startYear}-04-06`, to: `${startYear + 1}-04-05` };
 }
 
-/** The UK tax year containing a given date. */
-export function currentTaxYear(today = new Date()) {
-  const year = today.getUTCFullYear();
-  return today.getTime() >= Date.UTC(year, 3, 6) ? year : year - 1;
-}
-
 /**
  * Adds whole months to an ISO date, clamping to the end of the target month so
  * the 31st doesn't skip February. Shared by the recurring-payment forecast and

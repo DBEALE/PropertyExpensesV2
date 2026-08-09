@@ -22,6 +22,7 @@ import {
 } from '../store.js';
 import { highlight, takeFocus } from '../focus.js';
 import { openRuleEditor } from './rule-editor.js';
+import { showTransactionsForRule } from './transactions.js';
 
 /** Default order is the order rules actually fire in. */
 const sort = { key: 'position', dir: 'asc' };
@@ -72,7 +73,7 @@ export function renderRules(root, rerender) {
         'div',
         { class: 'notice' },
         'Add a property before creating rules. ',
-        el('a', { href: '#/properties' }, 'Go to Properties'),
+        el('a', { href: '#/config' }, 'Go to Config'),
       ),
     );
     return;
@@ -174,7 +175,21 @@ export function renderRules(root, rerender) {
                 )
               : el('td', {}, entityTag(propertyName(rule.propertyId), propertySlot(rule.propertyId))),
             hasSplit(rule) ? null : el('td', {}, entityTag(categoryName(rule.category), categorySlot(rule.category))),
-            el('td', { class: 'num' }, String(counts.get(rule.id) ?? 0)),
+            el(
+              'td',
+              { class: 'num' },
+              (counts.get(rule.id) ?? 0) === 0
+                ? el('span', { class: 'unset' }, '0')
+                : el(
+                    'button',
+                    {
+                      class: 'link',
+                      title: 'Show these transactions',
+                      onclick: () => showTransactionsForRule(rule.id),
+                    },
+                    String(counts.get(rule.id)),
+                  ),
+            ),
             el(
               'td',
               { class: 'actions' },

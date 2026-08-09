@@ -45,7 +45,7 @@ const propertySort = { key: 'name', dir: 'asc' };
 const categorySort = { key: null, dir: 'asc' };
 const complianceSort = { key: null, dir: 'asc' };
 
-export function renderProperties(root, rerender) {
+export function renderConfig(root, rerender) {
   const { properties, rules, transactions } = getState();
 
   // Counts are wanted both for display and for sorting, so work them out once.
@@ -124,7 +124,7 @@ export function renderProperties(root, rerender) {
                 {},
                 el(
                   'a',
-                  { href: `#/property/${encodeURIComponent(property.id)}`, class: 'property-link' },
+                  { href: `#/properties/${encodeURIComponent(property.id)}`, class: 'property-link' },
                   entityTag(property.name, `slot-${slotOf(property)}`),
                 ),
               ),
@@ -148,7 +148,7 @@ export function renderProperties(root, rerender) {
                 ),
                 el(
                   'a',
-                  { class: 'link', href: `#/property/${encodeURIComponent(property.id)}` },
+                  { class: 'link', href: `#/properties/${encodeURIComponent(property.id)}` },
                   'Details',
                 ),
                 el(

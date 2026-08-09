@@ -23,14 +23,14 @@ third-party service.
   categories) by exact amounts, with the shares required to total the transaction to the penny.
 - **Rule management** — add, edit and delete rules; see the conditions each one sets, how many
   transactions it currently claims, and the order they are evaluated in.
-- **Properties & categories** — add, rename and delete properties. Categories are editable too:
-  rename them, describe what belongs in each, add your own, delete ones you don't use.
+- **Config** — add, rename and delete properties; edit categories and compliance types. Everything
+  shared across the app is set up here.
+- **Properties** — one page per property, chosen from a dropdown: cashflow chart, monthly
+  breakdown, recurring payments, compliance, records and its transactions.
 - **Non-property classification** — mark personal spending and transfers as **Not a property**, so
   they're classified rather than sitting in the review queue, and stay out of the property totals.
 - **Backup** — download everything as one JSON file and restore from it. This is the safety net
   against browser storage being cleared.
-- **Accounts** — a per-property view: money in and out each month as a chart, and the recurring
-  payments behind it, with the next rent, mortgage and insurance dates worked out from history.
 - **Property status** — each property's page flags what needs doing: recurring payments that have
   stopped arriving, and compliance certificates (gas safety, EICR, PAT, legionella) coming due.
 - **Colour identity** — every property and category carries a colour, used consistently on every
@@ -62,8 +62,9 @@ Date,Details,Transaction Type,In,Out,Balance
 
 ## Property records
 
-Click a property on the **Properties & categories** tab to open its own page, holding everything you
-need about it beyond the bank statements:
+The **Properties** tab shows one property at a time, picked from the dropdown beside the heading.
+Clicking a property on the **Config** tab opens it here directly. Alongside the figures it holds
+everything you need about the property beyond the bank statements:
 
 | Section | Records |
 | --- | --- |
@@ -94,10 +95,21 @@ obvious if the blank row is actually on screen. Categories this property never u
 rather than trailing an empty column down the page, and columns sort like everywhere else, so
 clicking *Repairs* ranks the months by what they cost.
 
-**Recurring payments** — the same detection that drives the Accounts tab, scoped to this property:
-typical amount, which day of the month it usually lands, when it last arrived, when the next is
-expected. Anything overdue is flagged on its own row as well as in the banner. This is display-only
-reuse; the detection itself is unchanged.
+**Cashflow** — money in and out per month as stacked columns by category, on a single axis. Hover or
+keyboard-focus a block for its figure; past eight categories the smallest fold into a neutral
+"Other", and the breakdown table above still itemises every one.
+
+**Recurring payments** — repeats are found by grouping transactions by the rule that categorised
+them (or by payee where no rule applies), keeping anything seen twice or more about a month apart.
+Each shows its typical amount, the day of the month it usually lands on, when it last arrived and
+when the next is expected. Anything overdue is flagged on its own row as well as in the banner.
+
+Expected dates are inferred from your imported statements, not fetched from the bank: they are an
+estimate, and the page says so. One-off payments get no forecast rather than a bogus schedule.
+
+**Transactions** — this property's rows, read-only, with a category filter. Columns sort as they do
+everywhere, and the `By rule` badge still jumps to the rule. To change an assignment, use the
+Transactions tab — the link is right there.
 
 **Compliance** — gas safety certificates, EICRs and the like. These can't be inferred from a bank
 statement: they don't appear reliably in payee text, don't recur monthly, and their frequency varies
@@ -113,7 +125,7 @@ ledger, and keeping them apart stops the same money being counted twice.
 
 ### Compliance types
 
-Shared across every property and edited on the **Properties & categories** tab, alongside categories
+Shared across every property and edited on the **Config** tab, alongside categories
 — same pattern, same reasons. Seeded with Gas Safety Certificate (12 months), EICR (60), PAT Testing
 (12) and Legionella Risk Assessment (24), then yours to rename, re-time, add to or delete. Ids are
 the slug of the original name, so a rename never orphans the completions logged against it. Deleting
@@ -143,7 +155,7 @@ reintroduced by accident.)
 ## Categories
 
 Categories start as five defaults — **Rent, Ins, Repairs, Interest, Management** — but they are your
-data, not a fixed list. On the **Properties & categories** tab you can rename any of them, give each
+data, not a fixed list. On the **Config** tab you can rename any of them, give each
 a description of what belongs in it, add your own, and delete ones you don't use. A category's
 description appears as a tooltip everywhere the category is offered, and on the Summary column
 headings.
@@ -161,8 +173,7 @@ remaining category can't be deleted.
 
 Every property and category is assigned one of **eight fixed colours**, shown as a small swatch
 beside its name everywhere it appears — the transactions table, rules, the import preview, the
-summary, and the Accounts charts. Change one on the **Properties & categories** tab and it changes
-everywhere at once.
+summary, and the cashflow chart. Change one on the **Config** tab and it changes everywhere at once.
 
 The palette is a fixed set of eight rather than a free colour picker, and that is deliberate:
 
@@ -178,39 +189,6 @@ The palette is a fixed set of eight rather than a free colour picker, and that i
 New properties and categories take the next unused slot, so a small portfolio gets the
 best-separated colours first. Records created before colours existed get a stable colour derived
 from their id, so nothing is ever uncoloured and nothing shifts between sessions.
-
-## Accounts
-
-The **Accounts** tab answers "how is this property actually doing, and what is due next?" Pick a
-property — or *All properties*, or *Not a property* — and set a date range or tax year at the top;
-everything below re-renders against that one selection.
-
-**Headline tiles** — money in, money out, net, and how many entries make it up.
-
-**Monthly totals** — a stacked column chart with money in above the line and money out below it, on
-a single axis. For one property the stack is by category; for all properties it is by property, so
-the colours always answer the question the selector asked. Hover or keyboard-focus any block for its
-figure, and **Show the numbers** opens the exact table behind the chart. Past eight series the
-smallest fold into a neutral "Other" in the chart and stay itemised in the table.
-
-**Recurring payments** — the app works out which payments repeat by grouping transactions by the rule
-that categorised them (or by payee where no rule applies), keeping anything seen twice or more about
-a month apart. For each one it shows:
-
-- the day of the month it usually lands on ("Received around the 24th");
-- its typical amount, and how many times it has been seen;
-- when it last arrived, and **when the next one is expected**;
-- a warning when nothing has arrived since the expected date — the rent that hasn't come in.
-
-Expected dates are inferred from your imported statements, not fetched from the bank: they are an
-estimate, and the view says so. One-off payments get no forecast rather than a bogus schedule.
-
-**Transactions** — the same table as the Transactions screen, read-only, already narrowed to whatever
-this screen is showing. The property and date range follow the selection at the top, so there is one
-obvious place to change them; only the **category** filter is repeated here, since narrowing to
-"Repairs" for the property you are already looking at is the common question. Columns sort the same
-way, and the **By rule** badge still jumps to the rule. To change an assignment, use the Transactions
-screen — the link is right there.
 
 ## Money that isn't property income
 
@@ -281,7 +259,7 @@ uninvited — most hand edits are one-offs. Answer yes and the pre-filled editor
 
 ### Date ranges
 
-Every screen with a date filter — Transactions, Summary, Accounts — has the same control: a shortcut
+Every screen with a date filter — Transactions and Summary — has the same control: a shortcut
 dropdown followed by the two dates it fills in. The dates stay visible and editable; the dropdown is
 a shortcut, not a replacement, and typing a range by hand flips it to **Custom range** so it never
 claims a range it isn't showing.
@@ -298,8 +276,13 @@ statements start in 2025 would just be a menu of empty results.
 
 ### Filtering
 
-The Transactions screen filters on text, **property**, **category**, status and a date range, all on
-one line above the table. **Clear** appears as soon as anything is narrowed.
+The Transactions screen filters on text, **property**, **category**, **rule**, status and a date
+range, all on one line above the table. **Clear** appears as soon as anything is narrowed.
+
+Every rule has a **number** — its position in evaluation order — shown on the Rules table, on the
+`By rule #3` badge of any transaction it claimed, and in the rule filter, so the same rule reads the
+same everywhere. Clicking a rule's **match count** on the Rules tab jumps here with that rule
+selected and the other filters cleared, so the count and the rows you land on always agree.
 
 A split transaction belongs to every property and category it was split across, so filtering by
 either one keeps it — and filtering by a property *and* a category together shows only the rows
@@ -351,8 +334,9 @@ them. Two details worth knowing:
 
 - The **By rule** badge on a transaction opens the Rules tab scrolled to the rule that categorised
   it, briefly highlighted.
-- A **one-off** in the Accounts view opens the Transactions tab at that exact row. If your current
-  filters would hide it, they're cleared and you're told why.
+- The **match count** on the Rules tab opens the Transactions tab filtered to that rule.
+- A transaction jumped to from elsewhere is scrolled to and highlighted; if your current filters
+  would hide it, they're cleared and you're told why.
 
 ### Evaluation order
 
@@ -488,6 +472,8 @@ src/
   date-presets.js     tax-year / calendar-year / rolling date shortcuts
   transaction-filter.js  the filter predicates both screens share
   views/transaction-table.js  the table itself, editable or read-only
+  views/config.js     properties, categories and compliance types
+  views/property.js   one property: figures, schedule, records, transactions
   charts.js           small SVG chart builders (columns, legend, table view)
   importer.js         statement text -> transactions, duplicates, re-categorising
   store.js            in-memory state over IndexedDB

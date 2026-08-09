@@ -8,6 +8,7 @@ import {
   isFiltered,
   matchesCategory,
   matchesProperty,
+  matchesRule,
   matchesStatus,
 } from '../src/transaction-filter.js';
 
@@ -103,6 +104,42 @@ describe('combining filters', () => {
   });
 });
 
+describe('matchesRule', () => {
+  const byRule = [
+    tx('a', 'p1', 'Rent', { matchedRuleId: 'r1' }),
+    tx('b', 'p1', 'Ins', { matchedRuleId: 'r2' }),
+    tx('c', 'p1', 'Rent'), // assigned by hand: no rule
+  ];
+
+  it('keeps everything when set to any', () => {
+    assert.equal(ids(filterTransactions(byRule, { ruleId: ANY })).length, 3);
+    assert.equal(ids(filterTransactions(byRule, {})).length, 3);
+  });
+
+  it('selects the transactions one rule claimed', () => {
+    assert.deepEqual(ids(filterTransactions(byRule, { ruleId: 'r1' })), ['a']);
+    assert.deepEqual(ids(filterTransactions(byRule, { ruleId: 'r2' })), ['b']);
+  });
+
+  it('finds the ones no rule touched', () => {
+    assert.deepEqual(ids(filterTransactions(byRule, { ruleId: UNASSIGNED })), ['c']);
+  });
+
+  it('returns nothing for a rule that has been deleted', () => {
+    assert.deepEqual(ids(filterTransactions(byRule, { ruleId: 'gone' })), []);
+  });
+
+  it('combines with the other filters', () => {
+    assert.deepEqual(ids(filterTransactions(byRule, { ruleId: 'r1', category: 'Ins' })), []);
+    assert.deepEqual(ids(filterTransactions(byRule, { ruleId: 'r1', category: 'Rent' })), ['a']);
+  });
+
+  it('counts as a narrowed filter', () => {
+    assert.equal(matchesRule(byRule[0], 'r1'), true);
+    assert.equal(matchesRule(byRule[0], 'r2'), false);
+  });
+});
+
 describe('isFiltered', () => {
   it('is false for an untouched filter set', () => {
     assert.equal(isFiltered({ text: '', status: 'all', from: '', to: '', propertyId: ANY, category: ANY }), false);
@@ -114,5 +151,6 @@ describe('isFiltered', () => {
     assert.equal(isFiltered({ text: 'natwest' }), true);
     assert.equal(isFiltered({ status: 'review' }), true);
     assert.equal(isFiltered({ from: '2026-01-01' }), true);
+    assert.equal(isFiltered({ ruleId: 'r1' }), true);
   });
 });

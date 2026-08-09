@@ -908,6 +908,12 @@ input.months {
 
 /* --- property detail ----------------------------------------------------- */
 
+/* The property switcher sits beside the heading it changes. */
+.property-selector {
+  max-width: 260px;
+  margin-right: auto;
+}
+
 .property-link {
   color: inherit;
   text-decoration: none;

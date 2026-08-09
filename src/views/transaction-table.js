@@ -1,13 +1,13 @@
 /**
  * The transactions table, used editable on the Transactions screen and
- * read-only on the Accounts screen. One implementation so the two always show
- * the same columns, the same split handling and the same badges.
+ * read-only on the Properties screen. One implementation so the two always
+ * show the same columns, the same split handling and the same badges.
  */
 import { hasSplit, isAssigned } from '../allocation.js';
 import { el, entityTag, money, sortableTh, swatch, ukDate } from '../dom.js';
 import { setFocus } from '../focus.js';
 import { isKnownCategory, selectableProperties } from '../categories.js';
-import { describeRule } from '../rules.js';
+import { describeRule, orderRules, rulePositions, ruleLabel as ruleName } from '../rules.js';
 import {
   categoryName,
   categorySlot,
@@ -49,6 +49,8 @@ export function transactionTable(transactions, options) {
   const { categories } = getState();
   const properties = selectableProperties(getState().properties);
   const rows = sortRows(transactions, sort, SORT_ACCESSORS);
+  // The badge shows the same number the Rules table does.
+  const positions = rulePositions(getState().rules);
 
   const th = (label, key, thOptions) => sortableTh(label, key, sort, onSort, thOptions);
 
@@ -206,7 +208,7 @@ export function transactionTable(transactions, options) {
             window.location.hash = '#/rules';
           },
         },
-        'By rule',
+        `By rule #${positions.get(transaction.matchedRuleId) ?? '?'}`,
       );
     }
     return isAssigned(transaction)
@@ -264,6 +266,31 @@ export function propertyFilter(value, onChange, { includeUnassigned = true } = {
     includeUnassigned
       ? el('option', { value: '__unassigned__', selected: value === '__unassigned__' }, 'Unassigned')
       : null,
+  );
+}
+
+/**
+ * Rules as a filter, numbered exactly as the Rules table numbers them, so
+ * "#3" on a badge and "#3" in this list are the same rule.
+ */
+export function ruleFilter(value, onChange) {
+  const rules = getState().rules;
+  const positions = rulePositions(rules);
+  return el(
+    'select',
+    {
+      'aria-label': 'Rule filter',
+      onchange: (event) => onChange(event.target.value),
+    },
+    el('option', { value: 'all', selected: value === 'all' }, 'Any rule'),
+    el('option', { value: '__unassigned__', selected: value === '__unassigned__' }, 'No rule applied'),
+    ...orderRules(rules).map((rule) =>
+      el(
+        'option',
+        { value: rule.id, selected: rule.id === value, title: describeRule(rule, money) },
+        ruleName(rule, positions.get(rule.id)),
+      ),
+    ),
   );
 }
 

@@ -149,6 +149,26 @@ export function orderRules(rules) {
 }
 
 /**
+ * Each rule's number: its 1-based position in evaluation order.
+ *
+ * The Rules table, the "By rule #3" badge on a transaction and the rule filter
+ * all show the same number, so it is worked out in one place from the same
+ * ordering the engine actually uses.
+ *
+ * @param {import('./types.js').Rule[]} rules
+ * @returns {Map<string, number>}
+ */
+export function rulePositions(rules) {
+  return new Map(orderRules(rules).map((rule, i) => [rule.id, i + 1]));
+}
+
+/** "#3 contains PETERBOROUGH" — a rule named the way the tables show it. */
+export function ruleLabel(rule, position) {
+  const text = hasText(rule) ? rule.matchText : hasType(rule) ? rule.transactionTypeEquals : 'amount only';
+  return `#${position} ${text}`;
+}
+
+/**
  * Counts how many of the given transactions each rule would claim.
  * @param {import('./types.js').Rule[]} rules
  * @param {{details?: string, transactionType?: string, amount?: number}[]} transactions

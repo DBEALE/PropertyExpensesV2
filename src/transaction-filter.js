@@ -28,6 +28,15 @@ export function matchesCategory(transaction, category) {
   return shares.some((s) => s.category === category);
 }
 
+/**
+ * @param {string} ruleId a rule id, ANY, or UNASSIGNED for "no rule applied"
+ */
+export function matchesRule(transaction, ruleId) {
+  if (!ruleId || ruleId === ANY) return true;
+  if (ruleId === UNASSIGNED) return transaction.matchedRuleId === null;
+  return transaction.matchedRuleId === ruleId;
+}
+
 export function matchesStatus(transaction, status) {
   switch (status) {
     case 'review':
@@ -55,7 +64,7 @@ export function matchesDates(transaction, from, to) {
  *
  * @param {object[]} transactions
  * @param {{text?: string, status?: string, from?: string, to?: string,
- *   propertyId?: string, category?: string}} filters
+ *   propertyId?: string, category?: string, ruleId?: string}} filters
  */
 export function filterTransactions(transactions, filters = {}) {
   return transactions.filter(
@@ -64,7 +73,8 @@ export function filterTransactions(transactions, filters = {}) {
       matchesText(t, filters.text) &&
       matchesStatus(t, filters.status) &&
       matchesProperty(t, filters.propertyId) &&
-      matchesCategory(t, filters.category),
+      matchesCategory(t, filters.category) &&
+      matchesRule(t, filters.ruleId),
   );
 }
 
@@ -76,6 +86,7 @@ export function isFiltered(filters) {
       filters.from ||
       filters.to ||
       (filters.propertyId && filters.propertyId !== ANY) ||
-      (filters.category && filters.category !== ANY),
+      (filters.category && filters.category !== ANY) ||
+      (filters.ruleId && filters.ruleId !== ANY),
   );
 }

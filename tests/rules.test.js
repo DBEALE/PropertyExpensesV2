@@ -7,6 +7,8 @@ import {
   describeRule,
   findMatchingRule,
   matchesText,
+  ruleLabel,
+  rulePositions,
 } from '../src/rules.js';
 import { FIXTURE, rule } from './fixtures.js';
 
@@ -134,6 +136,41 @@ describe('condition combinations', () => {
     const second = rule({ id: 'second', matchText: 'BANK', propertyId: 'propB' });
     assert.equal(findMatchingRule(tx, [first, second]).id, 'first');
     assert.equal(findMatchingRule(tx, [second, first]).id, 'second');
+  });
+});
+
+describe('rulePositions', () => {
+  it('numbers rules by evaluation order, not by the order they were created', () => {
+    const loose = rule({ id: 'loose', matchText: 'NATWEST', propertyId: 'propA' });
+    const pinned = rule({ id: 'pinned', matchText: 'NATWEST', propertyId: 'propB', amountEquals: -428.06 });
+    // Created loose-first, but the pinned rule fires first, so it is #1.
+    const positions = rulePositions([loose, pinned]);
+    assert.equal(positions.get('pinned'), 1);
+    assert.equal(positions.get('loose'), 2);
+  });
+
+  it('numbers every rule exactly once', () => {
+    const rules = ['a', 'b', 'c'].map((id) => rule({ id, matchText: id, propertyId: 'propA' }));
+    const positions = rulePositions(rules);
+    assert.deepEqual([...positions.values()].sort(), [1, 2, 3]);
+  });
+
+  it('is empty when there are no rules', () => {
+    assert.equal(rulePositions([]).size, 0);
+  });
+});
+
+describe('ruleLabel', () => {
+  it('names a rule the way the badge and the filter both show it', () => {
+    assert.equal(ruleLabel(rule({ id: 'a', matchText: 'PETERBOROUGH', propertyId: 'p' }), 3), '#3 PETERBOROUGH');
+  });
+
+  it('falls back to the type, then to the amount, for a rule with no text', () => {
+    assert.equal(
+      ruleLabel(rule({ id: 'a', matchText: '', propertyId: 'p', transactionTypeEquals: 'Direct Debit' }), 1),
+      '#1 Direct Debit',
+    );
+    assert.equal(ruleLabel(rule({ id: 'a', matchText: '', propertyId: 'p', amountEquals: -5 }), 2), '#2 amount only');
   });
 });
 

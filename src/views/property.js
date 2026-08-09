@@ -5,10 +5,13 @@
  */
 import { accountSummary, isOverdue, monthlyTotals, paymentStreams, sharesFor } from '../accounts.js';
 import { sumAllocations } from '../allocation.js';
+import { capSeries, legend, stackedColumns } from '../charts.js';
 import { complianceStatus, upcomingCompliance } from '../compliance.js';
 import { addMonths } from '../dates.js';
 import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
+import { ANY, filterTransactions } from '../transaction-filter.js';
+import { categoryFilter, transactionTable } from './transaction-table.js';
 import { slotClass } from '../palette.js';
 import {
   SECTIONS,
@@ -30,16 +33,31 @@ import {
 let editing = null;
 /** Oldest month first, so a year of figures reads chronologically. */
 const matrixSort = { key: 'month', dir: 'asc' };
+/** State for the read-only transaction list at the foot of the page. */
+const listSort = { key: 'date', dir: 'desc' };
+const listFilter = { category: ANY };
 
 export function renderProperty(root, rerender, propertyId) {
   const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
-  const property = properties.find((p) => p.id === propertyId);
 
-  if (!property) {
+  if (properties.length === 0) {
     root.append(
-      el('h2', {}, 'Property'),
-      el('div', { class: 'empty' }, 'That property no longer exists. ', el('a', { href: '#/properties' }, 'Back to the list')),
+      el('h2', {}, 'Properties'),
+      el(
+        'div',
+        { class: 'empty' },
+        'No properties yet. ',
+        el('a', { href: '#/config' }, 'Add one on the Config tab'),
+      ),
     );
+    return;
+  }
+
+  // No property in the URL, or one that has since been deleted: fall back to
+  // the first rather than showing an error the user can't act on.
+  const property = properties.find((p) => p.id === propertyId) ?? properties[0];
+  if (property.id !== propertyId) {
+    window.location.replace(`#/properties/${encodeURIComponent(property.id)}`);
     return;
   }
 
@@ -50,13 +68,25 @@ export function renderProperty(root, rerender, propertyId) {
   const owned = equity(mortgage, valuation);
   const totals = accountSummary(sharesFor(transactions, propertyId));
 
+  const selector = el(
+    'select',
+    {
+      'aria-label': 'Property',
+      class: 'property-selector',
+      onchange: (event) => {
+        window.location.hash = `#/properties/${encodeURIComponent(event.target.value)}`;
+      },
+    },
+    ...properties.map((p) => el('option', { value: p.id, selected: p.id === property.id }, p.name)),
+  );
+
   root.append(
     el(
       'div',
       { class: 'toolbar' },
       el('h2', {}, entityTag(property.name, slotClass(property))),
-      el('a', { class: 'link', href: '#/properties' }, '← All properties'),
-      el('a', { class: 'link', href: '#/accounts' }, 'Accounts'),
+      selector,
+      el('a', { class: 'link', href: '#/config' }, 'Edit properties'),
     ),
   );
 
@@ -83,13 +113,98 @@ export function renderProperty(root, rerender, propertyId) {
     today,
   });
 
-  renderMonthlyBreakdown(root, sharesFor(transactions, propertyId), getState().categories, rerender);
+  const shares = sharesFor(transactions, propertyId);
+  renderCashflow(root, shares, getState().categories);
+  renderMonthlyBreakdown(root, shares, getState().categories, rerender);
   renderRecurring(root, streams, today);
   renderCompliance(root, property, complianceTypes, complianceCompletions, today, rerender);
+  renderTransactionList(root, rerender, transactions, property);
 
   for (const section of SECTIONS) {
     root.append(renderSection(section, property, propertyDetails, rerender));
   }
+}
+
+/**
+ * Money in and out per month as stacked columns, by category. Carried over
+ * from the Accounts screen this page replaced — the figures below say what,
+ * the chart says how it has moved.
+ */
+function renderCashflow(root, shares, categories) {
+  const months = monthlyTotals(shares);
+  if (months.length === 0) return;
+
+  const buckets = months.map((m) => ({ key: m.month, label: m.label }));
+  const groups = [
+    ...categories.map((c) => ({ id: c.id, label: c.name, slot: slotClass(c) })),
+    { id: null, label: 'Uncategorised', slot: 'slot-neutral' },
+  ];
+
+  const allSeries = groups
+    .map((group) => ({
+      key: group.id,
+      label: group.label,
+      slotClass: group.slot,
+      values: months.map((month) => month.byCategory.get(group.id) ?? 0),
+    }))
+    .filter((s) => s.values.some((v) => v !== 0));
+
+  // Past eight there is no ninth colourblind-safe hue, so the smallest fold
+  // into one neutral "Other"; the breakdown table below still itemises them.
+  const { series, folded } = capSeries(allSeries);
+
+  root.append(
+    el('h3', {}, 'Cashflow'),
+    el(
+      'p',
+      { class: 'hint' },
+      'Money in stacks above the line, money out below it. Hover or focus a block for its figure.',
+    ),
+    legend(series),
+    stackedColumns({ buckets, series }),
+    folded > 0
+      ? el('p', { class: 'hint' }, `${folded} smaller categories are grouped as “Other” in the chart.`)
+      : null,
+  );
+}
+
+/**
+ * This property's transactions, read-only. Editing happens on the Transactions
+ * screen, which is one click away and already knows how to filter to this
+ * property.
+ */
+function renderTransactionList(root, rerender, transactions, property) {
+  const visible = filterTransactions(transactions, { propertyId: property.id, category: listFilter.category });
+
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Transactions'),
+      el('span', { class: 'count' }, `${visible.length} shown`),
+      categoryFilter(listFilter.category, (value) => {
+        listFilter.category = value;
+        rerender();
+      }),
+      el('a', { class: 'link', href: '#/transactions' }, 'Edit on the Transactions tab'),
+    ),
+  );
+
+  if (visible.length === 0) {
+    root.append(el('div', { class: 'empty' }, 'No transactions match this selection.'));
+    return;
+  }
+
+  root.append(
+    transactionTable(visible, {
+      readOnly: true,
+      sort: listSort,
+      onSort: (key) => {
+        toggleSort(listSort, key, key === 'date' || key === 'amount' ? 'desc' : 'asc');
+        rerender();
+      },
+    }),
+  );
 }
 
 /**
@@ -360,7 +475,7 @@ function renderCompliance(root, property, types, completions, today, rerender) {
       'div',
       { class: 'toolbar' },
       el('h3', {}, 'Compliance'),
-      el('a', { class: 'link', href: '#/properties' }, 'Edit types'),
+      el('a', { class: 'link', href: '#/config' }, 'Edit types'),
     ),
     el(
       'p',
@@ -372,7 +487,7 @@ function renderCompliance(root, property, types, completions, today, rerender) {
 
   if (statuses.length === 0) {
     root.append(
-      el('div', { class: 'empty' }, 'No compliance types set up. ', el('a', { href: '#/properties' }, 'Add some')),
+      el('div', { class: 'empty' }, 'No compliance types set up. ', el('a', { href: '#/config' }, 'Add some')),
     );
     return;
   }

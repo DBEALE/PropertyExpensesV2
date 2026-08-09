@@ -15,12 +15,29 @@ import {
 } from '../store.js';
 import { dateRangeControls } from './date-filter.js';
 import { openRuleEditor } from './rule-editor.js';
-import { categoryFilter, propertyFilter, transactionTable } from './transaction-table.js';
+import { categoryFilter, propertyFilter, ruleFilter, transactionTable } from './transaction-table.js';
 
 /** Filter and sort state live outside render so they survive re-renders. */
-const filters = { text: '', status: 'all', from: '', to: '', propertyId: ANY, category: ANY };
+const filters = { text: '', status: 'all', from: '', to: '', propertyId: ANY, category: ANY, ruleId: ANY };
 /** Newest first by default, matching how a statement reads. */
 const sort = { key: 'date', dir: 'desc' };
+
+/**
+ * Called from the Rules screen: show the transactions a rule claimed, with the
+ * rule filter already set. Clears the other filters, since arriving here to
+ * see "the 12 rows this rule matched" and being shown four of them because a
+ * date range was still on would be a lie.
+ */
+export function showTransactionsForRule(ruleId) {
+  filters.text = '';
+  filters.status = 'all';
+  filters.from = '';
+  filters.to = '';
+  filters.propertyId = ANY;
+  filters.category = ANY;
+  filters.ruleId = ruleId;
+  window.location.hash = '#/transactions';
+}
 
 export function renderTransactions(root, rerender) {
   const { transactions } = getState();
@@ -32,7 +49,7 @@ export function renderTransactions(root, rerender) {
         { class: 'notice' },
         'No properties yet — you can still classify rows as “Not a property”, but everything else ' +
           'needs one. ',
-        el('a', { href: '#/properties' }, 'Add a property'),
+        el('a', { href: '#/config' }, 'Add a property'),
       ),
     );
   }
@@ -107,6 +124,10 @@ export function renderTransactions(root, rerender) {
         filters.category = value;
         rerender();
       }),
+      ruleFilter(filters.ruleId, (value) => {
+        filters.ruleId = value;
+        rerender();
+      }),
       statusSelect,
       ...dateRangeControls({
         transactions,
@@ -174,6 +195,7 @@ function clearFilters(rerender) {
   filters.to = '';
   filters.propertyId = ANY;
   filters.category = ANY;
+  filters.ruleId = ANY;
   rerender();
 }
 
