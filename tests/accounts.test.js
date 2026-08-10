@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   accountSummary,
+  hasEnded,
   isOverdue,
   monthLabel,
   monthRange,
@@ -12,6 +13,7 @@ import {
   paymentStreams,
   runningTotals,
   sharesFor,
+  streamState,
 } from '../src/accounts.js';
 import { NON_PROPERTY_ID } from '../src/categories.js';
 import { SLOT_KEYS, nextSlot, slotFromId, slotOf } from '../src/palette.js';
@@ -183,24 +185,74 @@ describe('paymentStreams', () => {
   });
 });
 
-describe('isOverdue', () => {
-  it('flags a recurring payment that has not arrived when it should have', () => {
-    const stale = [
-      transaction('2026-01-10', 'OLD RENT', 500),
-      transaction('2026-02-10', 'OLD RENT', 500),
-    ];
-    const [stream] = paymentStreams(sharesFor(stale, 'p1'), '2026-06-15');
-    assert.equal(isOverdue(stream, '2026-06-15'), true);
+describe('streamState', () => {
+  /** Rent paid monthly, last arriving on the given date. */
+  const rentUntil = (lastDate) => {
+    const months = ['2026-01-10', '2026-02-10', '2026-03-10', '2026-04-10', '2026-05-10', '2026-06-10'];
+    const upTo = months.slice(0, months.indexOf(lastDate) + 1);
+    return paymentStreams(
+      sharesFor(upTo.map((d) => transaction(d, 'RENT', 500)), 'p1'),
+      '2026-06-15',
+    )[0];
+  };
+
+  it('is current while the next payment is not yet due', () => {
+    assert.equal(streamState(rentUntil('2026-06-10'), '2026-06-15'), 'current');
+    assert.equal(isOverdue(rentUntil('2026-06-10'), '2026-06-15'), false);
   });
 
-  it('does not flag one that is simply not due yet', () => {
-    const [rent] = paymentStreams(sharesFor(HISTORY, 'p1'), '2026-08-05');
-    assert.equal(isOverdue(rent, '2026-08-05'), false);
+  it('is overdue when a payment or two has been missed', () => {
+    // Last paid 10 April, asked in mid-June: two missed, worth chasing.
+    assert.equal(streamState(rentUntil('2026-04-10'), '2026-06-15'), 'overdue');
+    assert.equal(isOverdue(rentUntil('2026-04-10'), '2026-06-15'), true);
+  });
+
+  it('is ended once it has been gone long enough to be finished, not late', () => {
+    // Nothing since February. A tenant who left is not five months in arrears,
+    // and reporting it as overdue for ever was the bug this replaced.
+    const stream = rentUntil('2026-02-10');
+    assert.equal(streamState(stream, '2026-06-15'), 'ended');
+    assert.equal(isOverdue(stream, '2026-06-15'), false);
+    assert.equal(hasEnded(stream, '2026-06-15'), true);
+  });
+
+  it('takes the staleness window from the caller', () => {
+    const stream = rentUntil('2026-02-10');
+    // A longer window keeps it in the "chase it" state for longer.
+    assert.equal(streamState(stream, '2026-06-15', { staleAfterMonths: 12 }), 'overdue');
+    assert.equal(streamState(stream, '2026-06-15', { staleAfterMonths: 1 }), 'ended');
+  });
+
+  it('retires income that stopped before the current tenancy began', () => {
+    // The former tenant's rent, with a new tenancy starting in April: they are
+    // not in arrears, they moved out.
+    const stream = rentUntil('2026-03-10');
+    assert.equal(streamState(stream, '2026-06-15'), 'overdue', 'without the tenancy it just looks late');
+    assert.equal(streamState(stream, '2026-06-15', { tenancyFrom: '2026-04-01' }), 'ended');
+  });
+
+  it('keeps income that has continued into the current tenancy', () => {
+    const stream = rentUntil('2026-06-10');
+    assert.equal(streamState(stream, '2026-06-15', { tenancyFrom: '2026-04-01' }), 'current');
+  });
+
+  it('does not let a new tenancy retire an outgoing payment', () => {
+    // A tenancy starting in April says nothing about the mortgage.
+    const mortgage = paymentStreams(
+      sharesFor(
+        [transaction('2026-05-30', 'NATWEST', -428.06), transaction('2026-06-30', 'NATWEST', -428.06)],
+        'p1',
+      ),
+      '2026-07-05',
+    )[0];
+    assert.equal(streamState(mortgage, '2026-07-05', { tenancyFrom: '2026-04-01' }), 'current');
   });
 
   it('never flags a one-off', () => {
     const streams = paymentStreams(sharesFor(HISTORY, 'p1'), '2027-01-01');
-    assert.equal(isOverdue(streams.find((s) => s.label === 'BOILER FIX LTD'), '2027-01-01'), false);
+    const oneOff = streams.find((s) => s.label === 'BOILER FIX LTD');
+    assert.equal(isOverdue(oneOff, '2027-01-01'), false);
+    assert.equal(hasEnded(oneOff, '2027-01-01'), false);
   });
 });
 

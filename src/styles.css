@@ -895,6 +895,10 @@ tr.row-overdue > td {
   background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
+tr.row-ended > td {
+  opacity: 0.62;
+}
+
 .overdue-note {
   font-size: 12px;
   color: var(--muted);

@@ -3,7 +3,14 @@
  * tenancy — each kept as a dated record, with everything it replaced still
  * readable underneath.
  */
-import { accountSummary, isOverdue, monthlyTotals, paymentStreams, sharesFor } from '../accounts.js';
+import {
+  accountSummary,
+  isOverdue,
+  monthlyTotals,
+  paymentStreams,
+  sharesFor,
+  streamState,
+} from '../accounts.js';
 import { sumAllocations } from '../allocation.js';
 import { capSeries, legend, stackedColumns } from '../charts.js';
 import { complianceStatus, upcomingCompliance } from '../compliance.js';
@@ -73,6 +80,19 @@ export function resolveSelectedProperty(properties, requestedId, rememberedId) {
   if (properties.length === 0) return OVERVIEW;
   if (requestedId) return properties.find((p) => p.id === requestedId) ?? OVERVIEW;
   return properties.find((p) => p.id === rememberedId) ?? OVERVIEW;
+}
+
+/**
+ * When the current tenancy began — the tenant's own start date if recorded,
+ * otherwise the date the record took effect. Used to retire a former tenant's
+ * rent so they are never reported as owing money.
+ *
+ * @returns {string|null} ISO date
+ */
+function tenancyStart(details, propertyId) {
+  const tenancy = currentRecord(details, propertyId, 'tenancy');
+  if (!tenancy) return null;
+  return tenancy.data?.startDate || tenancy.effectiveFrom || null;
 }
 
 export function renderProperty(root, rerender, propertyId) {
@@ -165,8 +185,11 @@ export function renderProperty(root, rerender, propertyId) {
     ),
   );
 
+  // The current tenancy retires the previous tenant's rent, so a former
+  // tenant is never reported as owing money.
+  const streamOptions = { tenancyFrom: tenancyStart(propertyDetails, propertyId) };
   const streams = paymentStreams(sharesFor(transactions, propertyId), today).filter((s) => s.recurring);
-  const lateStreams = streams.filter((s) => isOverdue(s, today));
+  const lateStreams = streams.filter((s) => isOverdue(s, today, streamOptions));
 
   renderComingUp(root, {
     dated: upcomingDates(propertyDetails, propertyId, today, 90),
@@ -178,7 +201,7 @@ export function renderProperty(root, rerender, propertyId) {
   const shares = sharesFor(transactions, propertyId);
   renderCashflow(root, shares, getState().categories);
   renderMonthlyBreakdown(root, shares, getState().categories, rerender);
-  renderRecurring(root, streams, today);
+  renderRecurring(root, streams, today, streamOptions);
   renderCompliance(root, property, complianceTypes, complianceCompletions, today, rerender);
   renderTransactionList(root, rerender, transactions, property);
 
@@ -204,7 +227,7 @@ function renderOverview(root, rerender) {
     const mortgage = currentRecord(propertyDetails, property.id, 'mortgage');
     const valuation = currentRecord(propertyDetails, property.id, 'valuation');
     const overdueStreams = paymentStreams(shares, today).filter(
-      (s) => s.recurring && isOverdue(s, today),
+      (s) => s.recurring && isOverdue(s, today, { tenancyFrom: tenancyStart(propertyDetails, property.id) }),
     );
     const compliance = upcomingCompliance(complianceTypes, complianceCompletions, property.id, today, 90);
     const dated = upcomingDates(propertyDetails, property.id, today, 90);
@@ -967,14 +990,15 @@ function renderMonthlyBreakdown(root, shares, categories, rerender) {
  * The recurring payments this property expects, straight from the same
  * detection the Accounts tab uses — scoped here to one property.
  */
-function renderRecurring(root, streams, today) {
+function renderRecurring(root, streams, today, options = {}) {
   root.append(
     el('h3', {}, 'Recurring payments'),
     el(
       'p',
       { class: 'hint' },
-      'Worked out from the statements you have imported. A payment is flagged when nothing has ' +
-        'arrived since it was expected.',
+      'Worked out from the statements you have imported. A payment is flagged when it is late; one ' +
+        'that has been gone for months, or that predates the current tenancy, is shown as stopped ' +
+        'rather than chased forever.',
     ),
   );
 
@@ -1006,10 +1030,12 @@ function renderRecurring(root, streams, today) {
         'tbody',
         {},
         ...streams.map((stream) => {
-          const late = isOverdue(stream, today);
+          const state = streamState(stream, today, options);
+          const late = state === 'overdue';
+          const ended = state === 'ended';
           return el(
             'tr',
-            { class: late ? 'row-overdue' : '' },
+            { class: late ? 'row-overdue' : ended ? 'row-ended' : '' },
             el(
               'td',
               { class: 'details' },
@@ -1022,6 +1048,14 @@ function renderRecurring(root, streams, today) {
                     ` nothing since ${ukDate(stream.lastDate)}`,
                   )
                 : null,
+              ended
+                ? el(
+                    'div',
+                    { class: 'overdue-note' },
+                    el('span', { class: 'badge' }, 'Stopped'),
+                    ` last paid ${ukDate(stream.lastDate)}`,
+                  )
+                : null,
             ),
             el(
               'td',
@@ -1030,7 +1064,9 @@ function renderRecurring(root, streams, today) {
             ),
             el('td', {}, `${stream.direction === 'in' ? 'in' : 'out'} on the ${ordinal(stream.typicalDay)}`),
             el('td', {}, ukDate(stream.lastDate)),
-            el('td', {}, ukDate(stream.nextExpected)),
+            // A stopped payment has no next date — forecasting one for a tenant
+            // who has moved out is exactly the error this replaced.
+            el('td', {}, ended ? el('span', { class: 'unset' }, '—') : ukDate(stream.nextExpected)),
           );
         }),
       ),

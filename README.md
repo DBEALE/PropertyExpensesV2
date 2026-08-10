@@ -140,6 +140,17 @@ when the next is expected. Anything overdue is flagged on its own row as well as
 Expected dates are inferred from your imported statements, not fetched from the bank: they are an
 estimate, and the page says so. One-off payments get no forecast rather than a bogus schedule.
 
+A payment that has been missing for a while reads as **Stopped**, not overdue, and is left out of
+the attention count. Two things retire one:
+
+- **silence beyond three months** — a tenant who left is not five months in arrears, and the same
+  applies to an insurer you switched or a lender you remortgaged away from;
+- **a tenancy that began after its last payment** — money coming *in* that stopped before the
+  current tenancy started belonged to the previous tenant, which your tenancy record already says.
+  This applies to income only: a new tenancy tells you nothing about the mortgage.
+
+Anything genuinely late — one or two payments missed — is still flagged as before.
+
 **Transactions** — this property's rows, read-only, with a category filter. Columns sort as they do
 everywhere, and the `By rule` badge still jumps to the rule. To change an assignment, use the
 Transactions tab — the link is right there.

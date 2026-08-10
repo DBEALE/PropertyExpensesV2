@@ -184,13 +184,57 @@ function nextAfter(lastDate, today) {
 }
 
 /**
- * Whether a recurring payment looks late: its next occurrence was expected
- * before today and nothing has arrived.
+ * How long a payment can be missing before it reads as finished rather than
+ * late. Roughly three missed payments: long enough not to cry wolf over a
+ * statement you haven't imported yet, short enough to still be actionable.
  */
-export function isOverdue(stream, today) {
-  if (!stream.recurring) return false;
+export const STALE_AFTER_MONTHS = 3;
+
+/**
+ * Where a recurring payment stands.
+ *
+ *   'current' — the next one isn't due yet
+ *   'overdue' — it was due and hasn't arrived; worth chasing
+ *   'ended'   — it has been gone so long that the arrangement is over
+ *
+ * The 'ended' state matters: without it, a tenant who moved out is reported as
+ * owing rent forever, and the warning gets louder the more certainly wrong it
+ * is. Two things retire a stream:
+ *
+ *   1. Silence beyond `staleAfterMonths`. General — it also covers an insurer
+ *      you left or a lender you remortgaged away from.
+ *   2. A tenancy that began after the last payment. Incoming money that
+ *      stopped before the current tenancy started belonged to the previous
+ *      tenant, which the tenancy record already tells us. This applies only to
+ *      money coming *in*: a new tenancy says nothing about the mortgage.
+ *
+ * @param {object} stream from paymentStreams
+ * @param {string} today ISO date
+ * @param {{staleAfterMonths?: number, tenancyFrom?: string|null}} [options]
+ * @returns {'current'|'overdue'|'ended'}
+ */
+export function streamState(stream, today, options = {}) {
+  const { staleAfterMonths = STALE_AFTER_MONTHS, tenancyFrom = null } = options;
+  if (!stream.recurring) return 'current';
+
+  if (tenancyFrom && stream.direction === 'in' && stream.lastDate < tenancyFrom) return 'ended';
+
   const expected = addMonths(stream.lastDate, 1);
-  return expected < today;
+  if (expected >= today) return 'current';
+  return addMonths(stream.lastDate, staleAfterMonths + 1) < today ? 'ended' : 'overdue';
+}
+
+/**
+ * Whether a recurring payment is late enough to chase — missed, but not so
+ * long ago that it has clearly stopped.
+ */
+export function isOverdue(stream, today, options = {}) {
+  return streamState(stream, today, options) === 'overdue';
+}
+
+/** Whether a recurring payment looks finished rather than late. */
+export function hasEnded(stream, today, options = {}) {
+  return streamState(stream, today, options) === 'ended';
 }
 
 /** Headline figures for one property, or for all of them together. */
