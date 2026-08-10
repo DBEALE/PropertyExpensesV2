@@ -908,6 +908,20 @@ input.months {
 
 /* --- property detail ----------------------------------------------------- */
 
+/* Drill-down from the overview: a button that reads as the property's name. */
+.property-drill {
+  padding: 0;
+  text-decoration: none;
+  color: inherit;
+  text-align: left;
+}
+
+.property-drill:hover .entity,
+.property-drill:focus-visible .entity {
+  text-decoration: underline;
+  color: var(--accent);
+}
+
 /* The property switcher sits beside the heading it changes. */
 .property-selector {
   max-width: 260px;

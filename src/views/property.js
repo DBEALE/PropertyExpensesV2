@@ -39,32 +39,37 @@ const listSort = { key: 'date', dir: 'desc' };
 const listFilter = { category: ANY };
 /** Date range for the monthly breakdown table, kept across re-renders. */
 const breakdownRange = { from: '', to: '' };
+/** Sort state for the cross-property overview table. */
+const overviewSort = { key: 'name', dir: 'asc' };
 /**
- * The property last looked at. The tab link is a bare "#/properties" with no
- * id, so without this, leaving the tab and coming back would drop you on the
- * first property rather than the one you were working on.
+ * Where the tab was left: null means the cross-property overview, an id means
+ * that property. The tab link is a bare "#/properties" with no id, so without
+ * this, leaving the tab and coming back would always land on the overview even
+ * when you were part-way through a property.
  */
 let lastViewed = null;
 
+/** The overview, rather than any one property. */
+export const OVERVIEW = null;
+
 /**
- * Works out which property to show.
+ * Works out what the Properties tab should show.
  *
- * An id in the URL always wins — a bookmark or a link from Config means that
- * property specifically. Otherwise fall back to the one last viewed, and only
- * then to the first, so a deleted property doesn't leave the page stuck.
+ * An id in the URL always wins — a bookmark, or a link from Config or the
+ * overview, means that property specifically. With no id, return to whatever
+ * was last open: the overview on a first visit, otherwise the property you
+ * were reading. A remembered property that has since been deleted falls back
+ * to the overview rather than leaving the page stuck.
  *
  * @param {{id: string}[]} properties
  * @param {string|null} requestedId from the URL
  * @param {string|null} rememberedId
- * @returns {{id: string}|null}
+ * @returns {{id: string}|null} null for the overview
  */
 export function resolveSelectedProperty(properties, requestedId, rememberedId) {
-  if (properties.length === 0) return null;
-  return (
-    properties.find((p) => p.id === requestedId) ??
-    properties.find((p) => p.id === rememberedId) ??
-    properties[0]
-  );
+  if (properties.length === 0) return OVERVIEW;
+  if (requestedId) return properties.find((p) => p.id === requestedId) ?? OVERVIEW;
+  return properties.find((p) => p.id === rememberedId) ?? OVERVIEW;
 }
 
 export function renderProperty(root, rerender, propertyId) {
@@ -84,6 +89,15 @@ export function renderProperty(root, rerender, propertyId) {
   }
 
   const property = resolveSelectedProperty(properties, propertyId, lastViewed);
+
+  if (property === OVERVIEW) {
+    lastViewed = null;
+    // A stale id in the URL would otherwise keep pointing at a deleted property.
+    if (propertyId) window.location.replace('#/properties');
+    else renderOverview(root, rerender);
+    return;
+  }
+
   if (property.id !== propertyId) {
     // Put the id in the URL so the page stays bookmarkable and a refresh comes
     // back to the same property. This re-enters render via hashchange.
@@ -115,6 +129,20 @@ export function renderProperty(root, rerender, propertyId) {
     el(
       'div',
       { class: 'toolbar' },
+      el(
+        'button',
+        {
+          class: 'link',
+          title: 'Back to all properties',
+          // A plain link to #/properties would bounce straight back here,
+          // since this property is the remembered one — so clear it first.
+          onclick: () => {
+            lastViewed = null;
+            window.location.hash = '#/properties';
+          },
+        },
+        '← All properties',
+      ),
       el('h2', {}, entityTag(property.name, slotClass(property))),
       selector,
       el('a', { class: 'link', href: '#/config' }, 'Edit properties'),
@@ -154,6 +182,229 @@ export function renderProperty(root, rerender, propertyId) {
   for (const section of SECTIONS) {
     root.append(renderSection(section, property, propertyDetails, rerender));
   }
+}
+
+/**
+ * The whole portfolio on one screen: what each property is worth, what it owes,
+ * what it has earned, and whether anything about it needs attention. Clicking a
+ * name drills into that property.
+ *
+ * This is also the portfolio-wide "what's due everywhere" view that the
+ * per-property compliance work deliberately left for later.
+ */
+function renderOverview(root, rerender) {
+  const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const rows = properties.map((property) => {
+    const shares = sharesFor(transactions, property.id);
+    const mortgage = currentRecord(propertyDetails, property.id, 'mortgage');
+    const valuation = currentRecord(propertyDetails, property.id, 'valuation');
+    const overdueStreams = paymentStreams(shares, today).filter(
+      (s) => s.recurring && isOverdue(s, today),
+    );
+    const compliance = upcomingCompliance(complianceTypes, complianceCompletions, property.id, today, 90);
+    const dated = upcomingDates(propertyDetails, property.id, today, 90);
+    // One list of everything approaching, so "next due" is the true next thing.
+    const upcoming = [...compliance, ...dated.map((d) => ({ ...d, overdue: false }))].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+
+    return {
+      property,
+      value: valuation ? number(valuation.data.value) : null,
+      debt: mortgage ? number(mortgage.data.amount) : null,
+      ltv: loanToValue(mortgage, valuation),
+      equity: equity(mortgage, valuation),
+      net: accountSummary(shares).net,
+      attention: overdueStreams.length + compliance.filter((c) => c.overdue).length,
+      overdueStreams,
+      next: upcoming.find((u) => !u.overdue) ?? null,
+    };
+  });
+
+  const total = (pick) =>
+    rows.reduce((sum, row) => sum + (pick(row) ?? 0), 0);
+  const portfolioValue = total((r) => r.value);
+  const portfolioDebt = total((r) => r.debt);
+  const needingAttention = rows.filter((r) => r.attention > 0);
+
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h2', {}, 'Properties'),
+      el('span', { class: 'count' }, `${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}`),
+      el('a', { class: 'link', href: '#/config' }, 'Add or edit properties'),
+    ),
+    el(
+      'div',
+      { class: 'tiles' },
+      tile('Portfolio value', portfolioValue ? money(portfolioValue) : '—'),
+      tile('Borrowing', portfolioDebt ? money(portfolioDebt) : '—'),
+      tile(
+        'Equity',
+        portfolioValue ? money(Math.round((portfolioValue - portfolioDebt) * 100) / 100) : '—',
+      ),
+      tile(
+        'Overall LTV',
+        portfolioValue ? `${Math.round((portfolioDebt / portfolioValue) * 1000) / 10}%` : '—',
+      ),
+      tile('Net from statements', money(total((r) => r.net)), total((r) => r.net) < 0 ? 'out' : 'in'),
+    ),
+  );
+
+  if (needingAttention.length > 0) {
+    root.append(
+      el(
+        'div',
+        { class: 'notice attention attention-overdue' },
+        el(
+          'div',
+          { class: 'attention-group' },
+          el('strong', {}, 'Needs attention'),
+          el(
+            'ul',
+            {},
+            ...needingAttention.map((row) =>
+              el(
+                'li',
+                {},
+                el('span', { class: 'badge badge-overdue' }, String(row.attention)),
+                ' ',
+                el(
+                  'button',
+                  { class: 'link', onclick: () => openProperty(row.property.id) },
+                  row.property.name,
+                ),
+                row.overdueStreams.length > 0
+                  ? ` — ${row.overdueStreams.map((s) => s.label).join(', ')} not received`
+                  : ' — compliance overdue',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  const accessors = {
+    name: (r) => r.property.name,
+    value: (r) => r.value,
+    debt: (r) => r.debt,
+    ltv: (r) => r.ltv,
+    equity: (r) => r.equity,
+    net: (r) => r.net,
+    attention: (r) => r.attention,
+    next: (r) => r.next?.date ?? null,
+  };
+  const sorted = sortRows(rows, overviewSort, accessors);
+  const onSort = (key) => {
+    toggleSort(overviewSort, key, key === 'name' ? 'asc' : 'desc');
+    rerender();
+  };
+  const oTh = (label, key, options) => sortableTh(label, key, overviewSort, onSort, options);
+
+  root.append(
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          oTh('Property', 'name'),
+          oTh('Value', 'value', { class: 'num' }),
+          oTh('Mortgage', 'debt', { class: 'num' }),
+          oTh('LTV', 'ltv', { class: 'num' }),
+          oTh('Equity', 'equity', { class: 'num' }),
+          oTh('Net', 'net', { class: 'num' }),
+          oTh('Attention', 'attention', { class: 'num' }),
+          oTh('Next due', 'next'),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...sorted.map((row) =>
+          el(
+            'tr',
+            {},
+            el(
+              'td',
+              {},
+              el(
+                'button',
+                {
+                  class: 'link property-drill',
+                  title: `Open ${row.property.name}`,
+                  onclick: () => openProperty(row.property.id),
+                },
+                entityTag(row.property.name, slotClass(row.property)),
+              ),
+            ),
+            el('td', { class: 'num' }, row.value === null ? '—' : money(row.value)),
+            el('td', { class: 'num' }, row.debt === null ? '—' : money(row.debt)),
+            el(
+              'td',
+              { class: `num ${row.ltv !== null && row.ltv > 75 ? 'out' : ''}` },
+              row.ltv === null ? '—' : `${row.ltv}%`,
+            ),
+            el('td', { class: 'num' }, row.equity === null ? '—' : money(row.equity)),
+            el('td', { class: `num strong ${row.net < 0 ? 'out' : 'in'}` }, money(row.net)),
+            el(
+              'td',
+              { class: 'num' },
+              row.attention === 0
+                ? el('span', { class: 'unset' }, '—')
+                : el('span', { class: 'badge badge-overdue' }, String(row.attention)),
+            ),
+            el(
+              'td',
+              {},
+              row.next
+                ? `${row.next.label} — ${ukDate(row.next.date)}`
+                : el('span', { class: 'unset' }, 'nothing in 90 days'),
+            ),
+          ),
+        ),
+      ),
+      el(
+        'tfoot',
+        {},
+        el(
+          'tr',
+          {},
+          el('th', {}, 'All properties'),
+          el('th', { class: 'num' }, portfolioValue ? money(portfolioValue) : '—'),
+          el('th', { class: 'num' }, portfolioDebt ? money(portfolioDebt) : '—'),
+          el('th', { class: 'num' }, ''),
+          el(
+            'th',
+            { class: 'num' },
+            portfolioValue ? money(Math.round((portfolioValue - portfolioDebt) * 100) / 100) : '—',
+          ),
+          el('th', { class: 'num strong' }, money(total((r) => r.net))),
+          el('th', { class: 'num' }, String(total((r) => r.attention))),
+          el('th', {}, ''),
+        ),
+      ),
+    ),
+    el(
+      'p',
+      { class: 'hint' },
+      'Click a property to open it. Value, mortgage and the figures derived from them come from the ' +
+        'records you have entered; Net comes from the categorised statements.',
+    ),
+  );
+}
+
+/** Drills into one property, which becomes the tab's remembered place. */
+function openProperty(propertyId) {
+  lastViewed = propertyId;
+  window.location.hash = `#/properties/${encodeURIComponent(propertyId)}`;
 }
 
 /**

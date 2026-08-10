@@ -25,8 +25,9 @@ third-party service.
   transactions it currently claims, and the order they are evaluated in.
 - **Config** — add, rename and delete properties; edit categories and compliance types. Everything
   shared across the app is set up here.
-- **Properties** — one page per property, chosen from a dropdown: cashflow chart, monthly
-  breakdown, recurring payments, compliance, records and its transactions.
+- **Properties** — a portfolio overview (value, LTV, equity, net, what needs attention) that drills
+  into one page per property: cashflow chart, monthly breakdown, recurring payments, compliance,
+  records and its transactions.
 - **Non-property classification** — mark personal spending and transfers as **Not a property**, so
   they're classified rather than sitting in the review queue, and stay out of the property totals.
 - **Backup** — download everything as one JSON file and restore from it. This is the safety net
@@ -62,12 +63,22 @@ Date,Details,Transaction Type,In,Out,Balance
 
 ## Property records
 
-The **Properties** tab shows one property at a time, picked from the dropdown beside the heading.
-Clicking a property on the **Config** tab opens it here directly. Leaving the tab and coming back
-returns you to the property you were on, and the id sits in the URL (`#/properties/<id>`) so a
-refresh or a bookmark does too. A property that has since been deleted falls back rather than
-leaving the page stuck. Alongside the figures it holds
-everything you need about the property beyond the bank statements:
+The **Properties** tab opens on a **cross-property overview**: one row per property with its value,
+mortgage, LTV, equity, net from the statements, anything needing attention, and the next thing
+falling due — plus portfolio totals and an overall LTV in the tiles above. Anything overdue anywhere
+is called out in a banner at the top, so this doubles as the portfolio-wide "what's due everywhere"
+view. Columns sort like every other table.
+
+**Click a property name to drill into it.** From there, **← All properties** goes back, and the
+dropdown beside the heading switches directly between properties.
+
+The tab returns you to wherever you left it: the overview on a first visit, or the property you were
+reading. The id sits in the URL (`#/properties/<id>`), so a refresh or a bookmark comes back to the
+same place. An id that no longer exists drops to the overview rather than silently showing a
+different property's figures.
+
+Alongside the figures, each property page holds everything you need about it beyond the bank
+statements:
 
 | Section | Records |
 | --- | --- |
@@ -140,8 +151,8 @@ Shared across every property and edited on the **Config** tab, alongside categor
 the slug of the original name, so a rename never orphans the completions logged against it. Deleting
 a type also removes its completions, and says how many before you confirm.
 
-*Not built yet:* a portfolio-wide "everything due across all properties" view. This is property-page
-only — the natural next step once it has been used in anger.
+Overdue compliance across the whole portfolio is surfaced on the Properties overview, alongside
+rent that has stopped arriving.
 
 ### Nothing is overwritten
 

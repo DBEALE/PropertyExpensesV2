@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { resolveSelectedProperty } from '../src/views/property.js';
+import { OVERVIEW, resolveSelectedProperty } from '../src/views/property.js';
 
 const PROPERTIES = [
   { id: 'p1', name: 'Ash Close' },
@@ -20,17 +20,25 @@ describe('resolveSelectedProperty', () => {
     assert.equal(resolveSelectedProperty(PROPERTIES, undefined, 'p3').id, 'p3');
   });
 
-  it('falls back to the first when nothing has been viewed yet', () => {
-    assert.equal(resolveSelectedProperty(PROPERTIES, null, null).id, 'p1');
+  it('shows the overview on a first visit, before anything has been opened', () => {
+    assert.equal(resolveSelectedProperty(PROPERTIES, null, null), OVERVIEW);
   });
 
-  it('falls back rather than sticking on a property that has been deleted', () => {
-    assert.equal(resolveSelectedProperty(PROPERTIES, 'gone', 'p2').id, 'p2', 'a stale URL uses the remembered one');
-    assert.equal(resolveSelectedProperty(PROPERTIES, null, 'gone').id, 'p1', 'a stale memory uses the first');
-    assert.equal(resolveSelectedProperty(PROPERTIES, 'gone', 'gone').id, 'p1');
+  it('falls back to the overview rather than sticking on a deleted property', () => {
+    assert.equal(resolveSelectedProperty(PROPERTIES, 'gone', 'p2'), OVERVIEW, 'a stale URL id is not silently swapped');
+    assert.equal(resolveSelectedProperty(PROPERTIES, null, 'gone'), OVERVIEW, 'a stale memory drops to the overview');
+    assert.equal(resolveSelectedProperty(PROPERTIES, 'gone', 'gone'), OVERVIEW);
   });
 
-  it('returns nothing when there are no properties at all', () => {
-    assert.equal(resolveSelectedProperty([], 'p1', 'p2'), null);
+  it('shows the overview when there are no properties at all', () => {
+    assert.equal(resolveSelectedProperty([], 'p1', 'p2'), OVERVIEW);
+  });
+
+  it('never silently shows a different property than the URL asked for', () => {
+    // Landing on someone else's figures because an id went stale would be
+    // worse than landing on the overview.
+    for (const requested of ['gone', 'p9']) {
+      assert.equal(resolveSelectedProperty(PROPERTIES, requested, 'p1'), OVERVIEW);
+    }
   });
 });
