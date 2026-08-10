@@ -910,6 +910,55 @@ input.months {
   text-align: right;
 }
 
+/* --- tax estimate -------------------------------------------------------- */
+
+.tax-settings {
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.tax-settings > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.tax-settings .detail-fields label {
+  min-width: 170px;
+}
+
+.tax-settings small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tax-bands {
+  margin-top: 4px;
+}
+
+.tax-bands > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+/* A statement, not a grid: two columns, the figure aligned right. */
+table.data.tax-table {
+  max-width: 560px;
+}
+
+table.data.tax-table td:first-child {
+  color: var(--muted);
+}
+
+tr.tax-total > td {
+  border-top: 2px solid var(--line);
+  font-weight: 600;
+  color: var(--ink);
+}
+
 /* --- property detail ----------------------------------------------------- */
 
 /*

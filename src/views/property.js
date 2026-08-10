@@ -263,21 +263,6 @@ function renderOverview(root, rerender) {
       el('span', { class: 'count' }, `${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}`),
       el('a', { class: 'link', href: '#/config' }, 'Add or edit properties'),
     ),
-    el(
-      'div',
-      { class: 'tiles' },
-      tile('Portfolio value', portfolioValue ? money(portfolioValue) : '—'),
-      tile('Borrowing', portfolioDebt ? money(portfolioDebt) : '—'),
-      tile(
-        'Equity',
-        portfolioValue ? money(Math.round((portfolioValue - portfolioDebt) * 100) / 100) : '—',
-      ),
-      tile(
-        'Overall LTV',
-        portfolioValue ? `${Math.round((portfolioDebt / portfolioValue) * 1000) / 10}%` : '—',
-      ),
-      tile('Net from statements', money(total((r) => r.net)), total((r) => r.net) < 0 ? 'out' : 'in'),
-    ),
   );
 
   if (needingAttention.length > 0) {
@@ -406,7 +391,14 @@ function renderOverview(root, rerender) {
           el('th', {}, 'All properties'),
           el('th', { class: 'num' }, portfolioValue ? money(portfolioValue) : '—'),
           el('th', { class: 'num' }, portfolioDebt ? money(portfolioDebt) : '—'),
-          el('th', { class: 'num' }, ''),
+          // Portfolio LTV: total borrowing against total value, not an average
+          // of the per-property percentages, which would weight a cheap
+          // property the same as an expensive one.
+          el(
+            'th',
+            { class: 'num' },
+            portfolioValue ? `${Math.round((portfolioDebt / portfolioValue) * 1000) / 10}%` : '—',
+          ),
           el(
             'th',
             { class: 'num' },

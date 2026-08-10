@@ -1,6 +1,7 @@
 import { hasSplit } from './allocation.js';
 import { DEFAULT_CATEGORIES, NON_PROPERTY_NAME, isNonProperty } from './categories.js';
 import { DEFAULT_COMPLIANCE_TYPES, completionsForType } from './compliance.js';
+import { withDefaults } from './tax.js';
 import { slotClass } from './palette.js';
 import { supersede } from './property-details.js';
 import * as db from './db.js';
@@ -14,6 +15,7 @@ const state = {
   propertyDetails: [],
   complianceTypes: [],
   complianceCompletions: [],
+  settings: [],
   rules: [],
   transactions: [],
 };
@@ -32,13 +34,14 @@ function notify() {
 }
 
 export async function load() {
-  let [properties, categories, propertyDetails, complianceTypes, complianceCompletions, rules, transactions] =
+  let [properties, categories, propertyDetails, complianceTypes, complianceCompletions, settings, rules, transactions] =
     await Promise.all([
       db.getAll('properties'),
       db.getAll('categories'),
       db.getAll('propertyDetails'),
       db.getAll('complianceTypes'),
       db.getAll('complianceCompletions'),
+      db.getAll('settings'),
       db.getAll('rules'),
       db.getAll('transactions'),
     ]);
@@ -60,6 +63,7 @@ export async function load() {
   state.propertyDetails = propertyDetails;
   state.complianceTypes = complianceTypes;
   state.complianceCompletions = complianceCompletions;
+  state.settings = settings;
   state.rules = rules;
   state.transactions = transactions.sort((a, b) => b.date.localeCompare(a.date));
   notify();
@@ -257,6 +261,19 @@ export async function saveComplianceCompletion({ propertyId, complianceTypeId, c
 /** Deletes one logged completion — for correcting a mistaken entry. */
 export async function deleteComplianceCompletion(id) {
   await db.remove('complianceCompletions', id);
+  await load();
+}
+
+/**
+ * The tax parameters behind the Summary estimate, with defaults filled in for
+ * anything not yet set — including on a first run, when nothing is stored.
+ */
+export function taxSettings() {
+  return withDefaults(state.settings.find((s) => s.id === 'tax'));
+}
+
+export async function saveTaxSettings(settings) {
+  await db.put('settings', { ...settings, id: 'tax' });
   await load();
 }
 

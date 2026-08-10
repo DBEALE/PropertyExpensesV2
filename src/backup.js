@@ -13,13 +13,14 @@ const FORMAT = 'property-expenses-backup';
 export function buildBackup(state, exportedAt) {
   return {
     format: FORMAT,
-    version: 4,
+    version: 5,
     exportedAt,
     properties: state.properties,
     categories: state.categories,
     propertyDetails: state.propertyDetails ?? [],
     complianceTypes: state.complianceTypes ?? [],
     complianceCompletions: state.complianceCompletions ?? [],
+    settings: state.settings ?? [],
     rules: state.rules,
     transactions: state.transactions,
   };
@@ -139,6 +140,13 @@ export function validateBackup(raw) {
     throw new BackupFormatError('Backup file contains malformed compliance completions.');
   }
 
+  // Settings are optional and self-describing; anything unrecognised is
+  // dropped rather than rejected, since a missing parameter falls back to its
+  // default rather than corrupting anything.
+  const settings = (Array.isArray(data.settings) ? data.settings : []).filter(
+    (s) => s && typeof s.id === 'string',
+  );
+
   const rules = data.rules.filter(
     (r) =>
       r &&
@@ -173,6 +181,7 @@ export function validateBackup(raw) {
     propertyDetails,
     complianceTypes,
     complianceCompletions,
+    settings,
     rules,
     transactions,
   };

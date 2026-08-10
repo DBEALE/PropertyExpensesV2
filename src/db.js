@@ -2,7 +2,8 @@ const DB_NAME = 'property-expenses';
 // v2 added the categories store, which used to be a fixed enum in code.
 // v3 added propertyDetails: dated records of address, mortgage, tenancy, etc.
 // v4 added complianceTypes and complianceCompletions: the inspection schedule.
-const DB_VERSION = 4;
+// v5 added settings: the tax parameters behind the Summary estimate.
+const DB_VERSION = 5;
 
 export const STORES = [
   'properties',
@@ -10,6 +11,7 @@ export const STORES = [
   'propertyDetails',
   'complianceTypes',
   'complianceCompletions',
+  'settings',
   'rules',
   'transactions',
 ];

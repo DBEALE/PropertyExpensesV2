@@ -37,7 +37,8 @@ third-party service.
 - **Colour identity** — every property and category carries a colour, used consistently on every
   screen.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
-  (6 April – 5 April), exportable to CSV.
+  (6 April – 5 April), exportable to CSV, with an income tax estimate that handles the 20% finance
+  cost credit.
 - **Export** — categorised transactions to CSV, with Property and Category columns appended, ready
   for Excel.
 
@@ -65,7 +66,7 @@ Date,Details,Transaction Type,In,Out,Balance
 
 The **Properties** tab opens on a **cross-property overview**: one row per property with its value,
 mortgage, LTV, equity, net from the statements, anything needing attention, and the next thing
-falling due — plus portfolio totals and an overall LTV in the tiles above. Anything overdue anywhere
+falling due, with portfolio totals and an overall LTV in the footer. Anything overdue anywhere
 is called out in a banner at the top, so this doubles as the portfolio-wide "what's due everywhere"
 view. Columns sort like every other table.
 
@@ -233,6 +234,46 @@ The palette is a fixed set of eight rather than a free colour picker, and that i
 New properties and categories take the next unused slot, so a small portfolio gets the
 best-separated colours first. Records created before colours existed get a stable colour derived
 from their id, so nothing is ever uncoloured and nothing shifts between sessions.
+
+## Tax estimate
+
+The **Summary** tab estimates the income tax due on the property profit for whatever date range is
+selected — so picking a tax year gives you that year's likely bill.
+
+The rule worth encoding is **mortgage interest**. Since 2020/21 it is not an allowable expense: it
+does not reduce the profit, and instead earns a **20% tax credit**, capped at the lowest of
+
+- the finance costs themselves,
+- the property profit, and
+- your income above the personal allowance.
+
+That cap is why a heavily mortgaged portfolio can be taxed on a profit it never really made, and why
+any interest that can't be used is reported rather than quietly dropped.
+
+Property profit is stacked **on top of your other income**, so it is taxed in the band it actually
+lands in — a profit that straddles two bands is split across them, and the effective rate is shown
+alongside so a headline band figure can't mislead.
+
+### The figures it asks for
+
+Under **Your figures**:
+
+| Parameter | Why it's needed |
+| --- | --- |
+| Other income | Salary, pension and so on — decides which band the profit falls in |
+| Your share % | For a jointly owned portfolio |
+| Mortgage interest is… | Which category holds finance costs, since categories are editable |
+| Use the £1,000 property allowance | Claimed *instead of* actual expenses, so it only helps when expenses are smaller |
+
+Under **Allowances and bands**, every threshold and rate is editable: personal allowance, basic band
+width, additional-rate threshold, the three rates, the credit rate and the property allowance. They
+default to the 2025/26 figures. The allowance taper above £100,000 is applied automatically.
+
+Everything is saved, so you only enter it once.
+
+**Bands are England, Wales and Northern Ireland.** Scotland sets its own rates on non-savings income
+— you can type those in, but the band *structure* here is the rUK one. This is an estimate to plan
+with, not a tax return, and not advice.
 
 ## Money that isn't property income
 
@@ -514,6 +555,7 @@ src/
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
   responsive.js       card-mode cell labels and the mobile sort control
+  tax.js              income tax estimate: bands, taper, finance cost credit
   date-presets.js     tax-year / calendar-year / rolling date shortcuts
   transaction-filter.js  the filter predicates both screens share
   views/transaction-table.js  the table itself, editable or read-only
