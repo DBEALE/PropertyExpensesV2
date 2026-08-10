@@ -41,6 +41,9 @@ const listFilter = { category: ANY };
 const breakdownRange = { from: '', to: '' };
 /** Sort state for the cross-property overview table. */
 const overviewSort = { key: 'name', dir: 'asc' };
+const insuranceSort = { key: 'name', dir: 'asc' };
+const tenancySort = { key: 'name', dir: 'asc' };
+const complianceOverviewSort = { key: 'name', dir: 'asc' };
 /**
  * Where the tab was left: null means the cross-property overview, an id means
  * that property. The tab link is a bare "#/properties" with no id, so without
@@ -397,6 +400,277 @@ function renderOverview(root, rerender) {
       { class: 'hint' },
       'Click a property to open it. Value, mortgage and the figures derived from them come from the ' +
         'records you have entered; Net comes from the categorised statements.',
+    ),
+  );
+
+  renderInsuranceOverview(root, rerender, properties, propertyDetails, today);
+  renderTenancyOverview(root, rerender, properties, propertyDetails, today);
+  renderComplianceOverview(root, rerender, properties, complianceTypes, complianceCompletions, today);
+}
+
+/**
+ * How a date reads: already gone, close enough to act on, or far enough away
+ * to ignore. Used for renewal, tenancy-end and certificate dates alike so they
+ * all mean the same thing at a glance.
+ */
+function dueClass(date, today) {
+  if (!date) return '';
+  if (date < today) return 'due-overdue';
+  return date <= addMonths(today, 3) ? 'due-soon' : '';
+}
+
+/** A date cell that colours itself by how close it is, or an em dash. */
+function dueCell(date, today, missing = '—') {
+  if (!date) return el('td', {}, el('span', { class: 'unset' }, missing));
+  const state = dueClass(date, today);
+  return el(
+    'td',
+    { class: state },
+    ukDate(date),
+    state === 'due-overdue' ? el('span', { class: 'badge badge-overdue' }, 'Overdue') : null,
+  );
+}
+
+/** A property name that drills into its page, for the secondary tables. */
+function drillCell(property) {
+  return el(
+    'td',
+    {},
+    el(
+      'button',
+      { class: 'link property-drill', onclick: () => openProperty(property.id) },
+      entityTag(property.name, slotClass(property)),
+    ),
+  );
+}
+
+/** Renewal dates and cover, across the portfolio. */
+function renderInsuranceOverview(root, rerender, properties, details, today) {
+  const rows = properties.map((property) => ({
+    property,
+    record: currentRecord(details, property.id, 'insurance'),
+  }));
+  const field = (row, key) => row.record?.data?.[key] ?? '';
+
+  const sorted = sortRows(rows, insuranceSort, {
+    name: (r) => r.property.name,
+    provider: (r) => field(r, 'provider'),
+    cover: (r) => field(r, 'coverLevel'),
+    premium: (r) => Number(String(field(r, 'premium')).replace(/[£,\s]/g, '')) || null,
+    renewal: (r) => field(r, 'renewalDate') || null,
+  });
+  const onSort = (key) => {
+    toggleSort(insuranceSort, key, key === 'premium' ? 'desc' : 'asc');
+    rerender();
+  };
+  const th = (label, key, options) => sortableTh(label, key, insuranceSort, onSort, options);
+  const missing = rows.filter((r) => !r.record).length;
+
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Insurance'),
+      missing > 0
+        ? el('span', { class: 'count' }, `${missing} propert${missing === 1 ? 'y has' : 'ies have'} none recorded`)
+        : null,
+    ),
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          th('Property', 'name'),
+          th('Provider', 'provider'),
+          th('Cover', 'cover'),
+          th('Premium', 'premium', { class: 'num' }),
+          th('Renews', 'renewal'),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...sorted.map((row) =>
+          el(
+            'tr',
+            {},
+            drillCell(row.property),
+            el('td', {}, field(row, 'provider') || el('span', { class: 'unset' }, 'not recorded')),
+            el('td', {}, field(row, 'coverLevel') || el('span', { class: 'unset' }, '—')),
+            el(
+              'td',
+              { class: 'num' },
+              field(row, 'premium') ? money(number(field(row, 'premium'))) : el('span', { class: 'unset' }, '—'),
+            ),
+            dueCell(field(row, 'renewalDate'), today),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/** Who is in each property, on what terms. */
+function renderTenancyOverview(root, rerender, properties, details, today) {
+  const rows = properties.map((property) => ({
+    property,
+    record: currentRecord(details, property.id, 'tenancy'),
+  }));
+  const field = (row, key) => row.record?.data?.[key] ?? '';
+
+  const sorted = sortRows(rows, tenancySort, {
+    name: (r) => r.property.name,
+    tenant: (r) => field(r, 'tenantName'),
+    rent: (r) => Number(String(field(r, 'rentAmount')).replace(/[£,\s]/g, '')) || null,
+    ends: (r) => field(r, 'endDate') || null,
+    deposit: (r) => Number(String(field(r, 'depositAmount')).replace(/[£,\s]/g, '')) || null,
+    agent: (r) => field(r, 'agent'),
+  });
+  const onSort = (key) => {
+    toggleSort(tenancySort, key, key === 'rent' || key === 'deposit' ? 'desc' : 'asc');
+    rerender();
+  };
+  const th = (label, key, options) => sortableTh(label, key, tenancySort, onSort, options);
+  const vacant = rows.filter((r) => !r.record).length;
+
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Tenancies'),
+      vacant > 0
+        ? el('span', { class: 'count' }, `${vacant} propert${vacant === 1 ? 'y has' : 'ies have'} none recorded`)
+        : null,
+    ),
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          th('Property', 'name'),
+          th('Tenant', 'tenant'),
+          th('Rent', 'rent', { class: 'num' }),
+          th('Deposit', 'deposit', { class: 'num' }),
+          th('Ends', 'ends'),
+          th('Agent', 'agent'),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...sorted.map((row) =>
+          el(
+            'tr',
+            {},
+            drillCell(row.property),
+            el('td', {}, field(row, 'tenantName') || el('span', { class: 'unset' }, 'none recorded')),
+            el(
+              'td',
+              { class: 'num' },
+              field(row, 'rentAmount')
+                ? money(number(field(row, 'rentAmount')))
+                : el('span', { class: 'unset' }, '—'),
+            ),
+            el(
+              'td',
+              { class: 'num' },
+              field(row, 'depositAmount')
+                ? money(number(field(row, 'depositAmount')))
+                : el('span', { class: 'unset' }, '—'),
+            ),
+            dueCell(field(row, 'endDate'), today, 'no end date'),
+            el('td', {}, field(row, 'agent') || el('span', { class: 'unset' }, '—')),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Certificates across the portfolio: properties down, compliance types across,
+ * each cell the date that item is next due there. Reading a column answers
+ * "which properties need a gas safety check", which is the question that
+ * actually gets asked.
+ */
+function renderComplianceOverview(root, rerender, properties, types, completions, today) {
+  root.append(el('div', { class: 'toolbar' }, el('h3', {}, 'Compliance')));
+
+  if (types.length === 0) {
+    root.append(
+      el('div', { class: 'empty' }, 'No compliance types set up. ', el('a', { href: '#/config' }, 'Add some')),
+    );
+    return;
+  }
+
+  const rows = properties.map((property) => ({
+    property,
+    statuses: new Map(
+      complianceStatus(types, completions, property.id, today).map((s) => [s.type.id, s]),
+    ),
+  }));
+
+  const accessors = { name: (r) => r.property.name };
+  for (const type of types) {
+    // A never-recorded item sorts last, like any other blank.
+    accessors[`type:${type.id}`] = (r) => r.statuses.get(type.id)?.nextDue ?? null;
+  }
+  const sorted = sortRows(rows, complianceOverviewSort, accessors);
+  const onSort = (key) => {
+    toggleSort(complianceOverviewSort, key, 'asc');
+    rerender();
+  };
+
+  root.append(
+    el(
+      'table',
+      { class: 'data' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          sortableTh('Property', 'name', complianceOverviewSort, onSort),
+          ...types.map((type) =>
+            sortableTh(type.name, `type:${type.id}`, complianceOverviewSort, onSort, {
+              title: `${type.description || type.name} — every ${type.frequencyMonths} months`,
+            }),
+          ),
+        ),
+      ),
+      el(
+        'tbody',
+        {},
+        ...sorted.map((row) =>
+          el(
+            'tr',
+            {},
+            drillCell(row.property),
+            ...types.map((type) => {
+              const status = row.statuses.get(type.id);
+              if (!status || status.neverRecorded) {
+                return el('td', {}, el('span', { class: 'unset' }, 'never recorded'));
+              }
+              return dueCell(status.nextDue, today);
+            }),
+          ),
+        ),
+      ),
+    ),
+    el(
+      'p',
+      { class: 'hint' },
+      'Each cell is when that certificate next falls due there, worked out from the last one logged ' +
+        'plus its frequency. Log completions on the property’s own page.',
     ),
   );
 }

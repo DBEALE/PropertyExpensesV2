@@ -69,6 +69,19 @@ falling due — plus portfolio totals and an overall LTV in the tiles above. Any
 is called out in a banner at the top, so this doubles as the portfolio-wide "what's due everywhere"
 view. Columns sort like every other table.
 
+Below it, three more cross-property tables:
+
+- **Insurance** — provider, cover level, premium and renewal date per property, with a count of any
+  properties that have none recorded.
+- **Tenancies** — tenant, rent, deposit, end date and letting agent.
+- **Compliance** — properties down the side, compliance types across the top, each cell the date that
+  certificate next falls due there. Reading a *column* answers "which properties need a gas safety
+  check", which is the question that actually gets asked.
+
+Dates in all three colour themselves the same way: red and labelled **Overdue** once past, amber
+within 90 days, plain otherwise. Anything not yet recorded says so rather than showing a blank or a
+made-up date. Every table sorts, and every property name drills in.
+
 **Click a property name to drill into it.** From there, **← All properties** goes back, and the
 dropdown beside the heading switches directly between properties.
 

@@ -908,6 +908,26 @@ input.months {
 
 /* --- property detail ----------------------------------------------------- */
 
+/*
+ * Due dates on the overview. Overdue also carries the word "Overdue"; "soon"
+ * is a nudge rather than a warning, so it stays a tint and never the only
+ * signal — the date itself is right there.
+ */
+td.due-overdue {
+  color: var(--danger);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+td.due-overdue .badge {
+  margin-left: 6px;
+}
+
+td.due-soon {
+  color: var(--warn);
+  white-space: nowrap;
+}
+
 /* Drill-down from the overview: a button that reads as the property's name. */
 .property-drill {
   padding: 0;
