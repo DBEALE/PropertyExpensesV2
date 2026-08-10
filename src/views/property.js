@@ -39,6 +39,33 @@ const listSort = { key: 'date', dir: 'desc' };
 const listFilter = { category: ANY };
 /** Date range for the monthly breakdown table, kept across re-renders. */
 const breakdownRange = { from: '', to: '' };
+/**
+ * The property last looked at. The tab link is a bare "#/properties" with no
+ * id, so without this, leaving the tab and coming back would drop you on the
+ * first property rather than the one you were working on.
+ */
+let lastViewed = null;
+
+/**
+ * Works out which property to show.
+ *
+ * An id in the URL always wins — a bookmark or a link from Config means that
+ * property specifically. Otherwise fall back to the one last viewed, and only
+ * then to the first, so a deleted property doesn't leave the page stuck.
+ *
+ * @param {{id: string}[]} properties
+ * @param {string|null} requestedId from the URL
+ * @param {string|null} rememberedId
+ * @returns {{id: string}|null}
+ */
+export function resolveSelectedProperty(properties, requestedId, rememberedId) {
+  if (properties.length === 0) return null;
+  return (
+    properties.find((p) => p.id === requestedId) ??
+    properties.find((p) => p.id === rememberedId) ??
+    properties[0]
+  );
+}
 
 export function renderProperty(root, rerender, propertyId) {
   const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
@@ -56,13 +83,14 @@ export function renderProperty(root, rerender, propertyId) {
     return;
   }
 
-  // No property in the URL, or one that has since been deleted: fall back to
-  // the first rather than showing an error the user can't act on.
-  const property = properties.find((p) => p.id === propertyId) ?? properties[0];
+  const property = resolveSelectedProperty(properties, propertyId, lastViewed);
   if (property.id !== propertyId) {
+    // Put the id in the URL so the page stays bookmarkable and a refresh comes
+    // back to the same property. This re-enters render via hashchange.
     window.location.replace(`#/properties/${encodeURIComponent(property.id)}`);
     return;
   }
+  lastViewed = property.id;
 
   const today = new Date().toISOString().slice(0, 10);
   const mortgage = currentRecord(propertyDetails, propertyId, 'mortgage');

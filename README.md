@@ -63,7 +63,10 @@ Date,Details,Transaction Type,In,Out,Balance
 ## Property records
 
 The **Properties** tab shows one property at a time, picked from the dropdown beside the heading.
-Clicking a property on the **Config** tab opens it here directly. Alongside the figures it holds
+Clicking a property on the **Config** tab opens it here directly. Leaving the tab and coming back
+returns you to the property you were on, and the id sits in the URL (`#/properties/<id>`) so a
+refresh or a bookmark does too. A property that has since been deleted falls back rather than
+leaving the page stuck. Alongside the figures it holds
 everything you need about the property beyond the bank statements:
 
 | Section | Records |
