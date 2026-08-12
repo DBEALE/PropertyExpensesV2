@@ -153,6 +153,15 @@ export function estimateTax(figures, settings) {
     financeCredit,
     unusedFinanceCosts,
     taxDue,
+    // The working, not just the answer: the screen shows each of these back to
+    // you as the arithmetic it performed, so no figure has to be taken on
+    // trust. Nothing here changes the result — they are the steps to it.
+    otherIncome,
+    taxOnOtherIncome: taxOnOther,
+    taxOnTotalIncome: taxOnTotal,
+    totalIncome: round(totalIncome),
+    personalAllowance: round(allowanceFor(totalIncome, settings)),
+    aboveAllowance: round(aboveAllowance),
     /** The band the last pound of profit fell in, for the explanation line. */
     marginalRate: marginalRateFor(otherIncome + profit, settings),
     effectiveRate: profit > 0 ? round((taxDue / profit) * 100) : 0,

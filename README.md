@@ -65,8 +65,11 @@ Date,Details,Transaction Type,In,Out,Balance
 ## Property records
 
 The **Properties** tab opens on a **cross-property overview**: one row per property with its value,
-mortgage, LTV, equity, net from the statements, anything needing attention, and the next thing
-falling due, with portfolio totals and an overall LTV in the footer. Anything overdue anywhere
+mortgage, LTV, equity, **net income for the tax year in progress**, anything needing attention, and
+the next thing falling due, with portfolio totals and an overall LTV in the footer. The net column
+is named for the year it covers ("Net income 2026/27") and counts only statements dated inside it —
+on this screen the question is how the portfolio is doing *now*, and a lifetime total quietly
+answers a different one. Anything overdue anywhere
 is called out in a banner at the top, so this doubles as the portfolio-wide "what's due everywhere"
 view. Columns sort like every other table.
 
@@ -102,9 +105,13 @@ statements:
 | Valuation | market value and date, source, purchase price and date |
 | Tenancy | tenant and contact details, dates, rent and due day, deposit amount/scheme/reference, letting agent |
 
-From the mortgage balance and the latest valuation the page computes **LTV** and **equity**, and
-shows them alongside the net figure from your actual statements. Anything falling due within 90 days
-— a fixed rate ending, an insurance renewal, a tenancy ending — is flagged at the top.
+Each section shows the current record with its history underneath. Anything falling due within 90
+days — a fixed rate ending, an insurance renewal, a tenancy ending — is flagged at the top.
+
+The property page leads with the **property switcher as its title**: it already names the property
+you are reading, so a heading beside it only said the same thing twice. **LTV** and **equity**,
+computed from the mortgage balance and the latest valuation, are on the all-properties table rather
+than repeated in a row of headline panels above every property page.
 
 ### Does this property need anything from me?
 
@@ -125,13 +132,16 @@ clicking *Repairs* ranks the months by what they cost.
 
 It carries the same date-range control as the Transactions tab — the shortcut dropdown plus the two
 dates — so a tax year is one click away. The year shortcuts here list only the years **this
-property** has transactions in, rather than every year in the file. The range applies to this table;
-the Cashflow chart above deliberately keeps showing the full history, so the trend stays visible
-while you read one year's figures.
+property** has transactions in, rather than every year in the file.
 
-**Cashflow** — money in and out per month as stacked columns by category, on a single axis. Hover or
-keyboard-focus a block for its figure; past eight categories the smallest fold into a neutral
-"Other", and the breakdown table above still itemises every one.
+**Cashflow** — money in and out per month as stacked columns by category, on a single axis, sitting
+inside the monthly breakdown between the date control and the table. Hover or keyboard-focus a block
+for its figure; past eight categories the smallest fold into a neutral "Other", and the breakdown
+table below still itemises every one.
+
+The date range drives **both** the chart and the table. It used to drive only the table, with the
+chart always showing the full history — which meant picking a tax year moved the figures and left
+the picture behind, quietly inviting you to read two different periods as one.
 
 **Recurring payments** — repeats are found by grouping transactions by the rule that categorised
 them (or by payee where no rule applies), keeping anything seen twice or more about a month apart.
@@ -253,6 +263,14 @@ any interest that can't be used is reported rather than quietly dropped.
 Property profit is stacked **on top of your other income**, so it is taxed in the band it actually
 lands in — a profit that straddles two bands is split across them, and the effective rate is shown
 alongside so a headline band figure can't mislead.
+
+### It shows its working
+
+Every line of the estimate carries the sum behind it, in your own figures rather than in the
+abstract — "£18,400 income − £5,120 expenses = £13,280", "tax on £58,280 is £11,142; tax on £45,000
+alone is £6,486; £11,142 − £6,486 = £4,656". The finance-cost credit names all three figures it is
+capped by and says which one won. The point is that you can check a number rather than trust it, and
+that a surprising result explains itself instead of needing to be reverse-engineered.
 
 ### The figures it asks for
 
@@ -415,6 +433,9 @@ them. Two details worth knowing:
 - On the **Summary**, sorting by a category column ranks properties by what they earned or spent
   under it. The "Not a property" line stays pinned to the bottom, since it is a footnote rather than
   one of the ranked rows.
+- The Summary's net column is **named for the period it is actually summing**. Pick a tax year and
+  it reads "Net income 2026/27"; pick anything else and it says the span it covers, or "(all
+  dates)". A column headed with a tax year it doesn't contain is worse than an unlabelled one.
 
 ### Getting between screens
 

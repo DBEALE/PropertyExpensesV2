@@ -811,42 +811,6 @@ tr.row-duplicate {
   margin-bottom: 8px;
 }
 
-.tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 12px 0 20px;
-}
-
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 140px;
-  padding: 12px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-
-.tile-label {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.tile-value {
-  font-size: 22px;
-  font-weight: 600;
-}
-
-.tile-value.in {
-  color: var(--in);
-}
-
-.tile-value.out {
-  color: var(--out);
-}
-
 .badge.overdue {
   margin-left: 8px;
 }
@@ -884,11 +848,14 @@ table.data.read-only tbody tr:hover {
 }
 
 /* Overdue is a state, not a series colour: it ships with the word "Overdue"
-   beside it so the meaning never rests on the colour alone. */
+   beside it so the meaning never rests on the colour alone. Filled rather than
+   outlined, because an outline reads as a label and this is an alarm. */
 .badge-overdue {
-  color: var(--danger);
+  background: var(--danger);
+  color: #fff;
   border-color: var(--danger);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 tr.row-overdue > td {
@@ -944,13 +911,25 @@ input.months {
   font-size: 13px;
 }
 
-/* A statement, not a grid: two columns, the figure aligned right. */
+/* A statement, not a grid: two columns, the figure aligned right. Wide enough
+   that each line's working reads as a sentence rather than a narrow column. */
 table.data.tax-table {
-  max-width: 560px;
+  max-width: 760px;
+}
+
+table.data.tax-table td {
+  vertical-align: top;
 }
 
 table.data.tax-table td:first-child {
   color: var(--muted);
+}
+
+/* The label leads; the arithmetic under it is the explanation, so it is set
+   apart rather than run on. */
+table.data.tax-table td:first-child > .share {
+  margin-top: 3px;
+  max-width: 60ch;
 }
 
 tr.tax-total > td {
@@ -995,10 +974,28 @@ td.due-soon {
   color: var(--accent);
 }
 
-/* The property switcher sits beside the heading it changes. */
-.property-selector {
-  max-width: 260px;
+/*
+ * The property switcher *is* the heading — it already names the property you
+ * are looking at, so a separate title beside it only said the same thing
+ * twice. Sized like the h2 it replaced, with the property's own colour on its
+ * edge in place of the swatch the entity tag used to carry.
+ */
+.property-title {
   margin-right: auto;
+  min-width: 0;
+}
+
+.property-selector {
+  max-width: 320px;
+  font-size: inherit;
+  font-weight: inherit;
+  padding: 4px 8px;
+  border-left: 4px solid var(--entity, var(--line));
+}
+
+.property-selector:hover {
+  border-color: var(--accent);
+  border-left-color: var(--entity, var(--accent));
 }
 
 .property-link {
@@ -1519,18 +1516,10 @@ tr.row-split td {
 
   /* --- everything else ------------------------------------------------ */
 
-  .tiles {
-    gap: 8px;
-  }
-
-  .tile {
-    flex: 1 1 calc(50% - 8px);
-    min-width: 0;
-    padding: 10px 12px;
-  }
-
-  .tile-value {
-    font-size: 18px;
+  /* The switcher is the page title here, so it gets the whole row. */
+  .property-selector {
+    max-width: none;
+    width: 100%;
   }
 
   .rule-dialog {

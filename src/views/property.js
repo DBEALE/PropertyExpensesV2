@@ -14,7 +14,8 @@ import {
 import { sumAllocations } from '../allocation.js';
 import { capSeries, legend, stackedColumns } from '../charts.js';
 import { complianceStatus, upcomingCompliance } from '../compliance.js';
-import { addMonths } from '../dates.js';
+import { addMonths, taxYearRange } from '../dates.js';
+import { taxYearLabel, taxYearOf } from '../date-presets.js';
 import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { ANY, filterTransactions } from '../transaction-filter.js';
@@ -130,17 +131,14 @@ export function renderProperty(root, rerender, propertyId) {
   lastViewed = property.id;
 
   const today = new Date().toISOString().slice(0, 10);
-  const mortgage = currentRecord(propertyDetails, propertyId, 'mortgage');
-  const valuation = currentRecord(propertyDetails, propertyId, 'valuation');
-  const ltv = loanToValue(mortgage, valuation);
-  const owned = equity(mortgage, valuation);
-  const totals = accountSummary(sharesFor(transactions, propertyId));
 
+  // The selector *is* the title: it already says which property you are on, so
+  // a heading repeating the same name beside it was saying it twice.
   const selector = el(
     'select',
     {
       'aria-label': 'Property',
-      class: 'property-selector',
+      class: `property-selector ${slotClass(property)}`,
       onchange: (event) => {
         window.location.hash = `#/properties/${encodeURIComponent(event.target.value)}`;
       },
@@ -166,22 +164,8 @@ export function renderProperty(root, rerender, propertyId) {
         },
         '← All properties',
       ),
-      el('h2', {}, entityTag(property.name, slotClass(property))),
-      selector,
+      el('h2', { class: 'property-title' }, selector),
       el('a', { class: 'link', href: '#/config' }, 'Edit properties'),
-    ),
-  );
-
-  // Headline figures, including the two that are computed rather than entered.
-  root.append(
-    el(
-      'div',
-      { class: 'tiles' },
-      tile('Value', valuation ? money(number(valuation.data.value)) : '—'),
-      tile('Mortgage', mortgage ? money(number(mortgage.data.amount)) : '—'),
-      tile('LTV', ltv === null ? '—' : `${ltv}%`, ltv !== null && ltv > 75 ? 'out' : ''),
-      tile('Equity', owned === null ? '—' : money(owned)),
-      tile('Net from statements', money(totals.net), totals.net < 0 ? 'out' : 'in'),
     ),
   );
 
@@ -199,7 +183,6 @@ export function renderProperty(root, rerender, propertyId) {
   });
 
   const shares = sharesFor(transactions, propertyId);
-  renderCashflow(root, shares, getState().categories);
   renderMonthlyBreakdown(root, shares, getState().categories, rerender);
   renderRecurring(root, streams, today, streamOptions);
   renderCompliance(root, property, complianceTypes, complianceCompletions, today, rerender);
@@ -222,6 +205,15 @@ function renderOverview(root, rerender) {
   const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
   const today = new Date().toISOString().slice(0, 10);
 
+  // Net is the *current tax year* rather than everything ever imported: on this
+  // screen the question is how the portfolio is doing now, and a lifetime total
+  // quietly answers a different one.
+  const currentTaxYear = taxYearOf(today);
+  const taxYear = taxYearRange(currentTaxYear);
+  const netLabel = `Net income ${taxYearLabel(currentTaxYear)}`;
+  const inTaxYear = (share) =>
+    share.transaction.date >= taxYear.from && share.transaction.date <= taxYear.to;
+
   const rows = properties.map((property) => {
     const shares = sharesFor(transactions, property.id);
     const mortgage = currentRecord(propertyDetails, property.id, 'mortgage');
@@ -242,7 +234,7 @@ function renderOverview(root, rerender) {
       debt: mortgage ? number(mortgage.data.amount) : null,
       ltv: loanToValue(mortgage, valuation),
       equity: equity(mortgage, valuation),
-      net: accountSummary(shares).net,
+      net: accountSummary(shares.filter(inTaxYear)).net,
       attention: overdueStreams.length + compliance.filter((c) => c.overdue).length,
       overdueStreams,
       next: upcoming.find((u) => !u.overdue) ?? null,
@@ -331,7 +323,10 @@ function renderOverview(root, rerender) {
           oTh('Mortgage', 'debt', { class: 'num' }),
           oTh('LTV', 'ltv', { class: 'num' }),
           oTh('Equity', 'equity', { class: 'num' }),
-          oTh('Net', 'net', { class: 'num' }),
+          oTh(netLabel, 'net', {
+            class: 'num',
+            title: `Net income from ${ukDate(taxYear.from)} to ${ukDate(taxYear.to)}`,
+          }),
           oTh('Attention', 'attention', { class: 'num' }),
           oTh('Next due', 'next'),
         ),
@@ -414,7 +409,8 @@ function renderOverview(root, rerender) {
       'p',
       { class: 'hint' },
       'Click a property to open it. Value, mortgage and the figures derived from them come from the ' +
-        'records you have entered; Net comes from the categorised statements.',
+        `records you have entered; ${netLabel} comes from the categorised statements dated ` +
+        `${ukDate(taxYear.from)} to ${ukDate(taxYear.to)} — the UK tax year in progress.`,
     ),
   );
 
@@ -697,12 +693,14 @@ function openProperty(propertyId) {
 }
 
 /**
- * Money in and out per month as stacked columns, by category. Carried over
- * from the Accounts screen this page replaced — the figures below say what,
- * the chart says how it has moved.
+ * Money in and out per month as stacked columns, by category. It sits inside
+ * the monthly breakdown and reads the same date range as the table under it —
+ * chart and figures answering the same question about the same months.
+ *
+ * @param {{month: string, label: string, byCategory: Map}[]} months already
+ *   filtered to the chosen range, so the chart cannot disagree with the table
  */
-function renderCashflow(root, shares, categories) {
-  const months = monthlyTotals(shares);
+function renderCashflow(root, months, categories) {
   if (months.length === 0) return;
 
   const buckets = months.map((m) => ({ key: m.month, label: m.label }));
@@ -725,7 +723,6 @@ function renderCashflow(root, shares, categories) {
   const { series, folded } = capSeries(allSeries);
 
   root.append(
-    el('h3', {}, 'Cashflow'),
     el(
       'p',
       { class: 'hint' },
@@ -854,6 +851,11 @@ function daysBetween(from, to) {
  * Every month between the first and last transaction appears, including ones
  * with nothing in them — a gap in the rent is only visible if the empty month
  * is actually on screen.
+ *
+ * The Cashflow chart lives here too, above the table and reading the same date
+ * range: it used to sit in its own section showing the full history, which
+ * meant picking a tax year moved the figures and left the picture behind,
+ * inviting you to compare two different periods side by side.
  */
 function renderMonthlyBreakdown(root, shares, categories, rerender) {
   // The year shortcuts are derived from this property's own transactions, so
@@ -887,8 +889,11 @@ function renderMonthlyBreakdown(root, shares, categories, rerender) {
         },
       }),
     ),
-    el('p', { class: 'hint' }, 'This range applies to the table below; the chart above shows the full history.'),
+    el('p', { class: 'hint' }, 'This range applies to both the chart and the table below.'),
   );
+
+  // Chart first, then the figures behind it — the same months either way.
+  renderCashflow(root, months, categories);
 
   if (months.length === 0) {
     root.append(
@@ -1218,15 +1223,6 @@ function logCompletion(property, type, today, rerender) {
     toast(`${type.name} logged.`);
     rerender();
   });
-}
-
-function tile(label, value, tone = '') {
-  return el(
-    'div',
-    { class: 'tile' },
-    el('span', { class: 'tile-label' }, label),
-    el('strong', { class: `tile-value ${tone}` }, value),
-  );
 }
 
 function number(value) {

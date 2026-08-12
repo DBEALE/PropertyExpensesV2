@@ -1,7 +1,8 @@
 import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
-import { filterByDate } from '../dates.js';
-import { download, el, entityTag, money, sortableTh, toast } from '../dom.js';
+import { filterByDate, taxYearRange } from '../dates.js';
+import { taxYearLabel, taxYearOf } from '../date-presets.js';
+import { download, el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { getState, saveTaxSettings, taxSettings } from '../store.js';
 import { estimateTax, summariseForTax } from '../tax.js';
@@ -12,9 +13,39 @@ import { slotClass } from '../palette.js';
 const range = { from: '', to: '' };
 const sort = { key: 'name', dir: 'asc' };
 
+/**
+ * What to call the Net column, given the range it is actually summing.
+ *
+ * A tax year is named as one — that is the figure a Self Assessment return
+ * wants, and "Net income 2026/27" says so. Any other range says what it really
+ * covers rather than borrowing a tax year's name for a period that isn't one.
+ *
+ * @param {string} from ISO date or ''
+ * @param {string} to ISO date or ''
+ * @returns {{label: string, title: string}}
+ */
+export function netColumnLabel(from, to) {
+  if (from && to) {
+    const year = taxYearOf(from);
+    const span = taxYearRange(year);
+    if (span.from === from && span.to === to) {
+      return {
+        label: `Net income ${taxYearLabel(year)}`,
+        title: `Net income for the ${taxYearLabel(year)} tax year, ${ukDate(from)} to ${ukDate(to)}`,
+      };
+    }
+  }
+  if (!from && !to) {
+    return { label: 'Net income (all dates)', title: 'Net income across every transaction imported' };
+  }
+  const span = `${from ? ukDate(from) : 'the start'} to ${to ? ukDate(to) : 'today'}`;
+  return { label: `Net income ${span}`, title: `Net income from ${span}` };
+}
+
 export function renderSummary(root, rerender) {
   const { transactions, properties, categories } = getState();
   const visible = filterByDate(transactions, range.from, range.to);
+  const net = netColumnLabel(range.from, range.to);
 
   root.append(
     el('div', { class: 'toolbar' }, el('h2', {}, 'Summary')),
@@ -125,7 +156,7 @@ export function renderSummary(root, rerender) {
               { class: 'num', title: c.description || `Sort by ${c.name}` },
             ),
           ),
-          sTh('Net', 'net', { class: 'num' }),
+          sTh(net.label, 'net', { class: 'num', title: net.title }),
         ),
       ),
       el(
@@ -176,7 +207,7 @@ export function renderSummary(root, rerender) {
           onclick: () => {
             const quote = (s) => `"${s.replace(/"/g, '""')}"`;
             const lines = [
-              ['Property', ...categories.map((c) => c.name), 'Net'].join(','),
+              ['Property', ...categories.map((c) => c.name), quote(net.label)].join(','),
               ...sortedRows.map((p) =>
                 [
                   quote(p.name),
@@ -216,13 +247,17 @@ function renderTaxEstimate(root, rerender, shares, categories) {
   const figures = summariseForTax(shares, settings);
   const estimate = estimateTax(figures, settings);
 
+  const financeCategoryName =
+    categories.find((c) => c.id === settings.financeCostCategoryId)?.name ?? settings.financeCostCategoryId;
+
   root.append(
     el('h3', {}, 'Tax estimate'),
     el(
       'p',
       { class: 'hint' },
       'An estimate for the range selected above, to plan with — not a tax return. Bands are England, ' +
-        'Wales and Northern Ireland; Scotland sets its own rates, which you can type in below.',
+        'Wales and Northern Ireland; Scotland sets its own rates, which you can type in below. Every ' +
+        'line shows the sum behind it, so you can check the figure rather than trust it.',
     ),
     taxSettingsForm(settings, categories, rerender),
   );
@@ -231,6 +266,14 @@ function renderTaxEstimate(root, rerender, shares, categories) {
     root.append(el('div', { class: 'empty' }, 'Nothing categorised in this range to estimate tax on.'));
     return;
   }
+
+  // Joint ownership is silent when you own the lot, and stated everywhere it
+  // touches a figure when you don't — otherwise the totals above and the tax
+  // figures below look like they disagree.
+  const share =
+    Number(settings.ownershipShare) === 100
+      ? ''
+      : `, then taken at your ${settings.ownershipShare}% share`;
 
   const line = (label, value, options = {}) =>
     el(
@@ -247,19 +290,44 @@ function renderTaxEstimate(root, rerender, shares, categories) {
       el(
         'tbody',
         {},
-        line('Rental income', money(figures.income), { tone: 'in' }),
+        line('Rental income', money(figures.income), {
+          tone: 'in',
+          note:
+            `Every categorised amount coming in over the range above, except the ${financeCategoryName} ` +
+            `category, added together${share}.`,
+        }),
         settings.usePropertyAllowance
           ? line('Property allowance', `−${money(estimate.deduction)}`, {
-              note: 'Claimed instead of actual expenses.',
+              note:
+                `Claimed instead of your actual expenses of ${money(figures.expenses)}. It is the lower of ` +
+                `the ${money(settings.propertyAllowance)} allowance and the ${money(figures.income)} of ` +
+                `income, so ${money(estimate.deduction)} is deducted.`,
             })
           : line('Allowable expenses', `−${money(figures.expenses)}`, {
-              note: 'Everything except the finance-cost category.',
+              note:
+                `Every categorised amount going out over the range above, except the ${financeCategoryName} ` +
+                `category, added together${share}. Mortgage interest is excluded here on purpose — since ` +
+                '2020/21 it is not an allowable expense and gets the credit below instead.',
             }),
-        line('Taxable property profit', money(estimate.profit), { strong: true }),
+        line('Taxable property profit', money(estimate.profit), {
+          strong: true,
+          note:
+            `${money(figures.income)} income − ${money(estimate.deduction)} ` +
+            `${settings.usePropertyAllowance ? 'property allowance' : 'expenses'} = ` +
+            `${money(estimate.profit)}` +
+            (estimate.loss > 0 ? ', and a negative result is treated as nil profit plus a loss.' : '.'),
+        }),
         // "Tax at 40%" would misread when a profit straddles two bands: some of
         // it is taxed at 20%. The rate quoted is the top one it reaches.
         line('Tax on the profit', money(estimate.taxBeforeCredit), {
-          note: `Stacked on top of your other income, reaching the ${estimate.marginalRate}% band.`,
+          note:
+            `The profit is stacked on top of your other income, so its tax is what it adds: tax on ` +
+            `${money(estimate.totalIncome)} (${money(estimate.otherIncome)} other income + ` +
+            `${money(estimate.profit)} profit) is ${money(estimate.taxOnTotalIncome)}; tax on the ` +
+            `${money(estimate.otherIncome)} alone is ${money(estimate.taxOnOtherIncome)}; ` +
+            `${money(estimate.taxOnTotalIncome)} − ${money(estimate.taxOnOtherIncome)} = ` +
+            `${money(estimate.taxBeforeCredit)}. The last pound of profit falls in the ` +
+            `${estimate.marginalRate}% band.`,
         }),
         line(
           `Finance cost credit (${settings.financeCreditRate}%)`,
@@ -267,21 +335,38 @@ function renderTaxEstimate(root, rerender, shares, categories) {
           {
             tone: 'in',
             note:
-              `${money(figures.financeCosts)} of interest, credit given on ${money(estimate.creditBase)}` +
+              `${money(figures.financeCosts)} of ${financeCategoryName} was spent${share}. The credit is ` +
+              'given on the lowest of three figures: the interest itself ' +
+              `(${money(figures.financeCosts)}), the property profit (${money(estimate.profit)}), and your ` +
+              `income above the personal allowance (${money(estimate.aboveAllowance)}). The lowest is ` +
+              `${money(estimate.creditBase)}, and ${settings.financeCreditRate}% of that is ` +
+              `${money(estimate.financeCredit)}.` +
               (estimate.unusedFinanceCosts > 0
-                ? ` — ${money(estimate.unusedFinanceCosts)} could not be used this year`
+                ? ` The remaining ${money(estimate.unusedFinanceCosts)} of interest could not be used this year.`
                 : ''),
           },
         ),
-        line('Estimated tax due', money(estimate.taxDue), { strong: true, tone: 'out' }),
+        line('Estimated tax due', money(estimate.taxDue), {
+          strong: true,
+          tone: 'out',
+          note:
+            `${money(estimate.taxBeforeCredit)} tax on the profit − ${money(estimate.financeCredit)} ` +
+            `finance cost credit = ${money(estimate.taxDue)}. The credit cannot take it below zero.`,
+        }),
         estimate.profit > 0
           ? line('Effective rate on profit', `${estimate.effectiveRate}%`, {
-              note: 'Tax due as a share of the taxable profit.',
+              note:
+                `${money(estimate.taxDue)} tax ÷ ${money(estimate.profit)} profit × 100 = ` +
+                `${estimate.effectiveRate}%. What the profit actually costs you, after the credit.`,
             })
           : null,
         estimate.loss > 0
           ? line('Loss carried forward', money(estimate.loss), {
-              note: 'A loss cannot be set against other income; it carries forward.',
+              note:
+                `${money(estimate.deduction)} ` +
+                `${settings.usePropertyAllowance ? 'property allowance' : 'expenses'} − ` +
+                `${money(figures.income)} income = ${money(estimate.loss)}. A property loss cannot be set ` +
+                'against other income; it carries forward against future property profits.',
             })
           : null,
       ),

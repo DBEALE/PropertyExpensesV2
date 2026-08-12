@@ -204,6 +204,47 @@ describe('estimateTax', () => {
   });
 });
 
+/**
+ * The screen shows its working, quoting these back as the arithmetic it
+ * performed. If a step and the result it feeds ever disagree, the explanation
+ * becomes a lie told confidently — so the steps are pinned to the answer.
+ */
+describe('the working behind the estimate', () => {
+  const e = estimateTax(
+    { income: 18000, expenses: 5000, financeCosts: 6000 },
+    { ...S, otherIncome: 45000 },
+  );
+
+  it('reports the two tax figures the profit tax is the difference of', () => {
+    assert.equal(e.taxOnOtherIncome, incomeTaxOn(45000, S));
+    assert.equal(e.taxOnTotalIncome, incomeTaxOn(45000 + e.profit, S));
+    assert.equal(e.taxBeforeCredit, e.taxOnTotalIncome - e.taxOnOtherIncome);
+  });
+
+  it('reports the total income the band was worked out on', () => {
+    assert.equal(e.otherIncome, 45000);
+    assert.equal(e.totalIncome, 45000 + e.profit);
+  });
+
+  it('reports the allowance and the income above it that caps the credit', () => {
+    assert.equal(e.personalAllowance, allowanceFor(e.totalIncome, S));
+    assert.equal(e.aboveAllowance, e.totalIncome - e.personalAllowance);
+    // The credit is given on the lowest of three, and the screen names all
+    // three — so the one it picked has to be the lowest of exactly those.
+    assert.equal(e.creditBase, Math.min(e.financeCosts, e.profit, e.aboveAllowance));
+  });
+
+  it('keeps the working honest when the taper has bitten', () => {
+    const tapered = estimateTax(
+      { income: 10000, expenses: 0, financeCosts: 0 },
+      { ...S, otherIncome: 105000 },
+    );
+    assert.equal(tapered.personalAllowance, allowanceFor(115000, S));
+    assert.ok(tapered.personalAllowance < S.personalAllowance, 'the allowance has tapered');
+    assert.equal(tapered.aboveAllowance, 115000 - tapered.personalAllowance);
+  });
+});
+
 describe('withDefaults', () => {
   it('fills in anything a saved record is missing', () => {
     const saved = { otherIncome: 50000 };
