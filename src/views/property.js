@@ -64,6 +64,38 @@ let lastViewed = null;
 export const OVERVIEW = null;
 
 /**
+ * The value the switcher's first entry carries. A sentinel rather than '',
+ * because an empty option value is indistinguishable from a property whose id
+ * failed to load.
+ */
+const OVERVIEW_OPTION = '__overview__';
+
+/**
+ * The one open section of a property page.
+ *
+ * The page used to run all five down the screen, which meant the compliance
+ * table was three scrolls below the thing that told you to look at it. One at
+ * a time, with every panel stating what is inside it, means the choice of what
+ * to read is made from summaries rather than by scrolling past them.
+ *
+ * `details` is labelled "Overview" on screen: it holds the five dated record
+ * sections — address through tenancy — which are an overview *of the property*
+ * rather than of the portfolio.
+ */
+export const PANELS = [
+  { key: 'breakdown', label: 'Monthly breakdown' },
+  { key: 'recurring', label: 'Recurring payments' },
+  { key: 'compliance', label: 'Compliance' },
+  { key: 'transactions', label: 'Transactions' },
+  { key: 'details', label: 'Overview' },
+];
+
+/** Which panel is open, kept across re-renders and across properties. */
+let openPanel = PANELS[0].key;
+/** Set when the strip itself changed the selection, so focus follows it. */
+let refocusPanel = false;
+
+/**
  * Works out what the Properties tab should show.
  *
  * An id in the URL always wins — a bookmark, or a link from Config or the
@@ -133,16 +165,27 @@ export function renderProperty(root, rerender, propertyId) {
   const today = new Date().toISOString().slice(0, 10);
 
   // The selector *is* the title: it already says which property you are on, so
-  // a heading repeating the same name beside it was saying it twice.
+  // a heading repeating the same name beside it was saying it twice. Going back
+  // to all properties is the first entry in it rather than a separate link —
+  // the switcher is already the thing you reach for to change what you are
+  // looking at, and "everything" is one of the choices.
   const selector = el(
     'select',
     {
       'aria-label': 'Property',
       class: `property-selector ${slotClass(property)}`,
       onchange: (event) => {
+        if (event.target.value === OVERVIEW_OPTION) {
+          // A plain hash change to #/properties would bounce straight back
+          // here, since this property is the remembered one — so forget it.
+          lastViewed = null;
+          window.location.hash = '#/properties';
+          return;
+        }
         window.location.hash = `#/properties/${encodeURIComponent(event.target.value)}`;
       },
     },
+    el('option', { value: OVERVIEW_OPTION }, 'Overview — all properties'),
     ...properties.map((p) => el('option', { value: p.id, selected: p.id === property.id }, p.name)),
   );
 
@@ -150,20 +193,6 @@ export function renderProperty(root, rerender, propertyId) {
     el(
       'div',
       { class: 'toolbar' },
-      el(
-        'button',
-        {
-          class: 'link',
-          title: 'Back to all properties',
-          // A plain link to #/properties would bounce straight back here,
-          // since this property is the remembered one — so clear it first.
-          onclick: () => {
-            lastViewed = null;
-            window.location.hash = '#/properties';
-          },
-        },
-        '← All properties',
-      ),
       el('h2', { class: 'property-title' }, selector),
       el('a', { class: 'link', href: '#/config' }, 'Edit properties'),
     ),
@@ -183,14 +212,244 @@ export function renderProperty(root, rerender, propertyId) {
   });
 
   const shares = sharesFor(transactions, propertyId);
-  renderMonthlyBreakdown(root, shares, getState().categories, rerender);
-  renderRecurring(root, streams, today, streamOptions);
-  renderCompliance(root, property, complianceTypes, complianceCompletions, today, rerender);
-  renderTransactionList(root, rerender, transactions, property);
+  const { categories } = getState();
+  const statuses = complianceStatus(complianceTypes, complianceCompletions, property.id, today);
+  const ownTransactions = filterTransactions(transactions, { propertyId: property.id });
 
-  for (const section of SECTIONS) {
-    root.append(renderSection(section, property, propertyDetails, rerender));
+  const summaries = panelSummaries({
+    shares,
+    categories,
+    streams,
+    lateStreams,
+    statuses,
+    transactions: ownTransactions,
+    property,
+    propertyDetails,
+    today,
+    streamOptions,
+  });
+
+  const body = el('div', { class: 'panel-body', id: 'panel-body', role: 'tabpanel' });
+  root.append(renderPanelChooser(summaries, rerender), body);
+
+  if (openPanel === 'breakdown') renderMonthlyBreakdown(body, shares, categories, rerender);
+  else if (openPanel === 'recurring') renderRecurring(body, streams, today, streamOptions);
+  else if (openPanel === 'compliance') renderCompliance(body, property, statuses, today, rerender);
+  else if (openPanel === 'transactions') renderTransactionList(body, rerender, transactions, property);
+  else {
+    for (const section of SECTIONS) {
+      body.append(renderSection(section, property, propertyDetails, rerender));
+    }
   }
+}
+
+/**
+ * The row of panels, and the click that swaps which one is open.
+ *
+ * Each is a real button with `role="tab"`: arrow keys move between them and the
+ * open one is the only one in the tab order, which is what a keyboard user
+ * expects of a strip of choices where exactly one applies.
+ */
+function renderPanelChooser(summaries, rerender) {
+  const open = (key) => {
+    openPanel = key;
+    // A re-render replaces these buttons, so the one that was clicked takes
+    // the focus with it when it is removed. The flag carries the intent across
+    // to the fresh strip; without it, arrowing along the panels would drop
+    // focus to the document after the first press.
+    refocusPanel = true;
+    rerender();
+  };
+
+  const buttons = PANELS.map((panel) => {
+    const selected = panel.key === openPanel;
+    return el(
+      'button',
+      {
+        class: `panel${selected ? ' selected' : ''}`,
+        type: 'button',
+        role: 'tab',
+        'aria-selected': String(selected),
+        'aria-controls': 'panel-body',
+        tabindex: selected ? '0' : '-1',
+        onclick: () => open(panel.key),
+        onkeydown: (event) => {
+          const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+          if (step === 0) return;
+          event.preventDefault();
+          const at = PANELS.findIndex((p) => p.key === openPanel);
+          // Wraps, so the strip has no dead end at either edge.
+          open(PANELS[(at + step + PANELS.length) % PANELS.length].key);
+        },
+      },
+      el('span', { class: 'panel-title' }, panel.label),
+      el('span', { class: 'panel-summary' }, summaries[panel.key]),
+    );
+  });
+
+  if (refocusPanel) {
+    refocusPanel = false;
+    // After the caller has appended this strip, not before.
+    queueMicrotask(() => buttons.find((b) => b.classList.contains('selected'))?.focus());
+  }
+
+  return el('div', { class: 'panels', role: 'tablist', 'aria-label': 'Property sections' }, ...buttons);
+}
+
+/**
+ * What each panel says about itself.
+ *
+ * A row of five bare labels would just be a menu of places to go and look; the
+ * point of the summary is that most visits end here, because the line under
+ * the title already answered the question. So each one leads with the figure
+ * that would otherwise have to be counted by eye — how many months' rent
+ * actually arrived, how many certificates have lapsed — rather than with how
+ * many rows the table has.
+ *
+ * @returns {Record<string, string>} panel key to a single line of text
+ */
+export function panelSummaries(ctx) {
+  return {
+    breakdown: breakdownSummary(ctx),
+    recurring: recurringSummary(ctx),
+    compliance: complianceSummary(ctx),
+    transactions: transactionsSummary(ctx),
+    details: detailsSummary(ctx),
+  };
+}
+
+/** Joins the clauses of a summary, dropping the ones that had nothing to say. */
+function clauses(...parts) {
+  return parts.filter(Boolean).join(' · ');
+}
+
+/**
+ * Whole pounds. A summary line is read at a glance and compared with another
+ * one beside it; pence in that position are noise, and the exact figure is one
+ * click away in the table itself.
+ */
+function roughMoney(amount) {
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}£${Math.round(Math.abs(amount)).toLocaleString('en-GB')}`;
+}
+
+/**
+ * Months where rent came in, and the largest things it went out on.
+ *
+ * "Money in" is the app's definition of rent throughout — income is positive,
+ * expenses negative — so a month with nothing positive in it is a month the
+ * rent did not arrive, which is the single fact worth putting on the panel.
+ *
+ * Reads the same date range as the table inside, so opening the panel never
+ * contradicts the line that persuaded you to open it.
+ */
+function breakdownSummary({ shares, categories }) {
+  const months = monthlyTotals(sharesInBreakdownRange(shares));
+  if (months.length === 0) return 'Nothing categorised against this property yet';
+
+  const withRent = months.filter((m) => m.income > 0).length;
+  const rent =
+    withRent === months.length
+      ? `All ${months.length} months’ rent received`
+      : `${withRent} of ${months.length} months’ rent received`;
+
+  // Biggest two costs by name, so "what is this property actually eating" is
+  // answered without opening anything. Shown unsigned: the category name says
+  // it is money out, and a minus in a summary line reads as a correction.
+  // Names keep the case they were given — lowercasing turns "EPC" into "epc".
+  const spend = categories
+    .map((c) => ({
+      name: c.name,
+      total: months.reduce((sum, m) => sum + (m.byCategory.get(c.id) ?? 0), 0),
+    }))
+    .filter((c) => c.total < 0)
+    .sort((a, b) => a.total - b.total)
+    .slice(0, 2)
+    .map((c) => `${roughMoney(Math.abs(c.total))} ${c.name}`);
+
+  const net = months.reduce((sum, m) => sum + m.net, 0);
+  return clauses(rent, ...spend, `net ${roughMoney(net)}`);
+}
+
+/** The shares the Monthly breakdown panel would show, given its current range. */
+function sharesInBreakdownRange(shares) {
+  return shares.filter(
+    (s) =>
+      (!breakdownRange.from || s.transaction.date >= breakdownRange.from) &&
+      (!breakdownRange.to || s.transaction.date <= breakdownRange.to),
+  );
+}
+
+function recurringSummary({ streams, lateStreams, today, streamOptions }) {
+  if (streams.length === 0) return 'None spotted yet — import another month to see them';
+
+  const live = streams.filter((s) => streamState(s, today, streamOptions) !== 'ended');
+  const ended = streams.length - live.length;
+  const next = live
+    .filter((s) => !lateStreams.includes(s))
+    .map((s) => s.nextExpected)
+    .sort()[0];
+
+  return clauses(
+    `${live.length} repeating payment${live.length === 1 ? '' : 's'}`,
+    lateStreams.length > 0
+      ? `${lateStreams.length} overdue`
+      : next
+        ? `next expected ${ukDate(next)}`
+        : null,
+    ended > 0 ? `${ended} stopped` : null,
+  );
+}
+
+function complianceSummary({ statuses }) {
+  if (statuses.length === 0) return 'No compliance types set up yet';
+
+  const overdue = statuses.filter((s) => s.overdue).length;
+  const never = statuses.filter((s) => s.neverRecorded).length;
+  const next = statuses
+    .filter((s) => !s.overdue && s.nextDue !== null)
+    .map((s) => s.nextDue)
+    .sort()[0];
+
+  return clauses(
+    `${statuses.length} certificate${statuses.length === 1 ? '' : 's'} tracked`,
+    overdue > 0 ? `${overdue} overdue` : null,
+    never > 0 ? `${never} never logged` : null,
+    overdue === 0 && next ? `next due ${ukDate(next)}` : null,
+  );
+}
+
+function transactionsSummary({ transactions }) {
+  if (transactions.length === 0) return 'Nothing assigned to this property yet';
+  const latest = transactions.map((t) => t.date).sort().at(-1);
+  return clauses(
+    `${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`,
+    `latest ${ukDate(latest)}`,
+  );
+}
+
+/**
+ * How complete the property's own records are, and what is missing.
+ *
+ * Naming the gaps rather than counting them: "Insurance and Tenancy not
+ * recorded" is a thing to go and do, where "3 of 5 recorded" only says that
+ * something, somewhere, is absent.
+ */
+function detailsSummary({ property, propertyDetails }) {
+  const recorded = SECTIONS.filter((s) => currentRecord(propertyDetails, property.id, s.key));
+  if (recorded.length === 0) return 'Nothing recorded yet — address, mortgage, tenancy and more';
+
+  const missing = SECTIONS.filter((s) => !recorded.includes(s)).map((s) => s.label);
+  return clauses(
+    `${listing(recorded.map((s) => s.label))} recorded`,
+    missing.length > 0 ? `${listing(missing)} not recorded` : null,
+  );
+}
+
+/** "A, B and C" — an English list, for text a person reads rather than scans. */
+function listing(items) {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
 /**
@@ -730,10 +989,16 @@ function renderCashflow(root, months, categories) {
     ),
     legend(series),
     stackedColumns({ buckets, series }),
-    folded > 0
-      ? el('p', { class: 'hint' }, `${folded} smaller categories are grouped as “Other” in the chart.`)
-      : null,
   );
+
+  // Node.append stringifies null into a literal "null" on the page — el()
+  // filters its children, but this is a direct append, so the branch has to
+  // happen out here rather than as an argument to it.
+  if (folded > 0) {
+    root.append(
+      el('p', { class: 'hint' }, `${folded} smaller categories are grouped as “Other” in the chart.`),
+    );
+  }
 }
 
 /**
@@ -861,12 +1126,7 @@ function renderMonthlyBreakdown(root, shares, categories, rerender) {
   // The year shortcuts are derived from this property's own transactions, so
   // the list never offers a year this property has nothing in.
   const dated = shares.map((s) => ({ date: s.transaction.date }));
-  const inRange = shares.filter(
-    (s) =>
-      (!breakdownRange.from || s.transaction.date >= breakdownRange.from) &&
-      (!breakdownRange.to || s.transaction.date <= breakdownRange.to),
-  );
-  const months = monthlyTotals(inRange);
+  const months = monthlyTotals(sharesInBreakdownRange(shares));
 
   root.append(
     el(
@@ -1084,13 +1344,15 @@ function ordinal(day) {
 }
 
 /**
- * Certificates and inspections. Unlike the payments above, nothing here can be
- * inferred from the bank — each row is only as current as the last completion
- * logged against it.
+ * Certificates and inspections. Unlike the recurring payments, nothing here can
+ * be inferred from the bank — each row is only as current as the last
+ * completion logged against it.
+ *
+ * Takes the statuses rather than working them out: the panel above the table
+ * already needed them for its summary, and two calculations of "is this
+ * overdue" that could drift apart is exactly the bug worth not having.
  */
-function renderCompliance(root, property, types, completions, today, rerender) {
-  const statuses = complianceStatus(types, completions, property.id, today);
-
+function renderCompliance(root, property, statuses, today, rerender) {
   root.append(
     el(
       'div',

@@ -105,13 +105,18 @@ statements:
 | Valuation | market value and date, source, purchase price and date |
 | Tenancy | tenant and contact details, dates, rent and due day, deposit amount/scheme/reference, letting agent |
 
-Each section shows the current record with its history underneath. Anything falling due within 90
-days — a fixed rate ending, an insurance renewal, a tenancy ending — is flagged at the top.
+These five live together under the property page's **Overview** panel, each showing the current
+record with its history underneath. Anything falling due within 90 days — a fixed rate ending, an
+insurance renewal, a tenancy ending — is flagged at the top of the page regardless of which panel is
+open.
 
 The property page leads with the **property switcher as its title**: it already names the property
-you are reading, so a heading beside it only said the same thing twice. **LTV** and **equity**,
-computed from the mortgage balance and the latest valuation, are on the all-properties table rather
-than repeated in a row of headline panels above every property page.
+you are reading, so a heading beside it only said the same thing twice. Its first entry is
+**Overview — all properties**, which is how you get back to the portfolio table; there is no
+separate back link, because the switcher is already the control you reach for to change what you are
+looking at, and "everything" is one of the choices. **LTV** and **equity**, computed from the
+mortgage balance and the latest valuation, are on the all-properties table rather than repeated in a
+row of headline panels above every property page.
 
 ### Does this property need anything from me?
 
@@ -122,6 +127,35 @@ records falling due (fixed-rate end, insurance renewal, tenancy end), compliance
 days, and recurring payments that haven't arrived. Overdue items are listed first, styled distinctly
 and labelled with how late they are ("Gas Safety Certificate — due 24/07/2026, 14 days ago"), because
 "this lapsed three weeks ago" is a different kind of fact from "insurance renews in September".
+
+### One section at a time
+
+Under the banner is a strip of five panels — **Monthly breakdown**, **Recurring payments**,
+**Compliance**, **Transactions**, **Overview** — of which exactly one is open at a time, its content
+filling the page below.
+
+Each panel carries a line of **summary under its title**, and that is the point of them. The page
+used to run all five sections down the screen, which meant the compliance table sat three scrolls
+below the banner telling you to look at it. Now the strip is a set of *answers* rather than a set of
+destinations, and most visits should end at the summary without opening anything:
+
+| Panel | Reads like |
+| --- | --- |
+| Monthly breakdown | `18 of 19 months' rent received · £7,790 Interest · £1,100 Repairs · net £10,432` |
+| Recurring payments | `1 repeating payment · 1 overdue` |
+| Compliance | `3 certificates tracked · 1 overdue · 1 never logged` |
+| Transactions | `68 transactions · latest 30/07/2026` |
+| Overview | `Insurance, Mortgage, Valuation and Tenancy recorded · Address not recorded` |
+
+Each leads with the figure that would otherwise have to be counted by eye — how many months' rent
+actually arrived, which certificates have lapsed, which records are missing — rather than with how
+many rows the table has. Costs are shown unsigned, because the category name already says the money
+went out. The **Overview** panel holds the five dated record sections, address through tenancy,
+together on one page: an overview *of the property*, as distinct from the portfolio overview at the
+top of the switcher.
+
+They are real tabs: arrow keys move along the strip, only the open one is in the tab order, and
+focus follows the selection.
 
 **Monthly breakdown** — the Summary tab's matrix pivoted for this property: categories across the
 top, one row per month, with a Net column and a totals row. Every month between the first and last

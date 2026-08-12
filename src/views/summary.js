@@ -190,14 +190,20 @@ export function renderSummary(root, rerender) {
         ),
       ),
     ),
-    hasNonProperty
-      ? el(
-          'p',
-          { class: 'hint' },
-          'The “Not a property” line is shown for completeness and is excluded from the ' +
-            '“All properties” totals.',
-        )
-      : null,
+    // Wrapped rather than a bare ternary: Node.append stringifies null into a
+    // literal "null" on the page, where el() would have filtered it out.
+    el(
+      'div',
+      {},
+      hasNonProperty
+        ? el(
+            'p',
+            { class: 'hint' },
+            'The “Not a property” line is shown for completeness and is excluded from the ' +
+              '“All properties” totals.',
+          )
+        : null,
+    ),
     el(
       'div',
       { class: 'toolbar' },
