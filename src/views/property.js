@@ -79,14 +79,15 @@ const OVERVIEW_OPTION = '__overview__';
  *
  * `details` is labelled "Overview" on screen: it holds the five dated record
  * sections — address through tenancy — which are an overview *of the property*
- * rather than of the portfolio.
+ * rather than of the portfolio. It leads, because "what is this place" comes
+ * before "what did it cost".
  */
 export const PANELS = [
+  { key: 'details', label: 'Overview' },
   { key: 'breakdown', label: 'Monthly breakdown' },
   { key: 'recurring', label: 'Recurring payments' },
   { key: 'compliance', label: 'Compliance' },
   { key: 'transactions', label: 'Transactions' },
-  { key: 'details', label: 'Overview' },
 ];
 
 /** Which panel is open, kept across re-renders and across properties. */
@@ -1058,10 +1059,11 @@ function renderCashflow(root, months, categories) {
     el(
       'p',
       { class: 'hint' },
-      'Money in stacks above the line, money out below it. Hover or focus a block for its figure.',
+      'Money in stacks above the line, money out below it, and the dark line is what each month ' +
+        'actually left you with. Hover or focus a block for its figure.',
     ),
     legend(series),
-    stackedColumns({ buckets, series }),
+    stackedColumns({ buckets, series, netLabel: 'Net' }),
   );
 
   // Node.append stringifies null into a literal "null" on the page — el()
@@ -1125,6 +1127,10 @@ function renderTransactionList(root, rerender, transactions, property) {
   root.append(
     transactionTable(visible, {
       readOnly: true,
+      // This property's share of a split, not the whole transaction: a £900
+      // roof divided three ways cost this property £300, and the Amount column
+      // here should be a figure that reconciles with the rest of its page.
+      shareOf: property.id,
       sort: listSort,
       onSort: (key) => {
         toggleSort(listSort, key, key === 'date' || key === 'amount' ? 'desc' : 'asc');
@@ -1735,7 +1741,11 @@ function renderSection(section, property, records, rerender) {
       'div',
       { class: 'section-head' },
       el('h3', {}, section.label),
-      current && !isEditing ? el('span', { class: 'count' }, section.summary(current.data)) : null,
+      // No summary beside the heading. It restated the first line or two of the
+      // record printed directly underneath it — "Halifax · 3.89%" above a tile
+      // whose first rows are Lender: Halifax, Interest rate: 3.89% — which was
+      // pure repetition once the sections became tiles rather than a long page
+      // you might be reading the top of.
       el(
         'button',
         {

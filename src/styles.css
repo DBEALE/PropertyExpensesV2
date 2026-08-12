@@ -752,11 +752,12 @@ tr.row-duplicate {
   padding: 4px 0 8px;
 }
 
+/* Fills whatever it is given. The 960px cap was there when the chart sat in a
+   column of prose; a year of months needs the room. */
 .chart-svg {
   display: block;
   width: 100%;
   min-width: 340px;
-  max-width: 960px;
   height: auto;
 }
 
@@ -787,10 +788,31 @@ tr.row-duplicate {
   font-variant-numeric: tabular-nums;
 }
 
-.chart-svg .chart-value {
+/*
+ * Net drawn over the stack it summarises. Ink rather than a palette slot: it is
+ * not one series among the others, it is the answer the others add up to — and
+ * borrowing a categorical hue for it would imply a category.
+ */
+.chart-svg .net-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-svg .net-dot {
   fill: var(--ink);
-  font-size: 11px;
-  font-weight: 600;
+  /* A ring of the page colour keeps the dot readable where the line crosses a
+     column of similar tone. */
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+
+.chart-svg .net-dot:hover,
+.chart-svg .net-dot:focus-visible {
+  r: 5;
+  outline: none;
 }
 
 .chart-legend {
@@ -1219,7 +1241,8 @@ td.due-soon {
   margin: 0;
 }
 
-.section-head .count {
+/* The heading takes the slack now that nothing sits between it and the button. */
+.section-head h3 {
   margin-right: auto;
 }
 
@@ -1430,6 +1453,55 @@ tr.row-non-property td:first-child {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+/*
+ * Your own note on a transaction, under the bank's description of it.
+ *
+ * Read-only screens show it as text; the editable table shows a field that is
+ * invisible until it has something to say or you point at it. Hundreds of
+ * empty boxes down a statement would be worse than no feature at all, so an
+ * unfilled note is a placeholder that fades until hovered or focused.
+ */
+.note {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.note-input {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 2px 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.note-input.empty {
+  opacity: 0;
+}
+
+.note-input:hover,
+.note-input:focus,
+tr:hover .note-input {
+  opacity: 1;
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.note-input:focus {
+  font-style: normal;
+  color: var(--ink);
+  border-color: var(--accent);
+  outline: none;
 }
 
 .share-amounts {

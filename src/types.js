@@ -44,6 +44,9 @@
  * @property {Allocation[]} [allocations] Set when split across properties;
  *   sums to `amount` exactly. Mutually exclusive with propertyId/category.
  * @property {string|null} matchedRuleId Rule that auto-assigned this, if any.
+ * @property {string} [notes] Free text you add yourself — why this repair cost
+ *   what it did, which tenant a part-payment was from. Never touched by the
+ *   importer or the rule engine, and shown wherever the transaction is.
  * @property {string} sourceFilename
  * @property {string} importedAt
  */

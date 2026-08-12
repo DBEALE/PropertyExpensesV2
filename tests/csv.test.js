@@ -114,18 +114,44 @@ describe('toCsv', () => {
     },
   ];
 
-  it('splits signed amounts back into In/Out and appends property and category', () => {
+  it('splits signed amounts back into In/Out and appends property, category and notes', () => {
     const lines = toCsv(transactions, () => '3 Peterborough Gate').split('\r\n');
-    assert.equal(lines[0], 'Date,Details,Transaction Type,In,Out,Balance,Property,Category');
+    assert.equal(lines[0], 'Date,Details,Transaction Type,In,Out,Balance,Property,Category,Notes');
     assert.equal(
       lines[1],
-      '24/07/2026,S Agyapong 3 PETERBOROUGH GAT,Inward Payment,1150.00,,16477.43,3 Peterborough Gate,Rent',
+      '24/07/2026,S Agyapong 3 PETERBOROUGH GAT,Inward Payment,1150.00,,16477.43,3 Peterborough Gate,Rent,',
     );
     // A comma inside Details must come back out quoted.
     assert.equal(
       lines[2],
-      '30/07/2026,"DIRECT LINE, FR BUS",Direct Debit,,30.16,16019.21,3 Peterborough Gate,Ins',
+      '30/07/2026,"DIRECT LINE, FR BUS",Direct Debit,,30.16,16019.21,3 Peterborough Gate,Ins,',
     );
+  });
+
+  it('exports a note, quoted when it needs to be', () => {
+    const noted = [{ ...transactions[1], notes: 'Renewal, paid annually' }];
+    const [, line] = toCsv(noted, () => '3 Peterborough Gate').split('\r\n');
+    assert.ok(line.endsWith(',"Renewal, paid annually"'), line);
+  });
+
+  it('puts a split transaction’s note on its first line only', () => {
+    // Repeating it against every share would read as several notes rather than
+    // one note about one transaction.
+    const split = [
+      {
+        ...transactions[0],
+        propertyId: null,
+        category: null,
+        notes: 'Half each',
+        allocations: [
+          { propertyId: 'p1', category: 'Rent', amount: 575 },
+          { propertyId: 'p2', category: 'Rent', amount: 575 },
+        ],
+      },
+    ];
+    const [, first, second] = toCsv(split, () => 'A property').split('\r\n');
+    assert.ok(first.endsWith(',Half each'), first);
+    assert.ok(second.endsWith(','), second);
   });
 
   it('round-trips through the parser back to the same amounts', () => {

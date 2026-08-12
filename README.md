@@ -15,6 +15,8 @@ third-party service.
   Rows already imported from an overlapping statement are flagged and skipped by default.
 - **Review table** — editable Property and Category per row, filterable by text, property, category,
   date and status (auto-categorised by rule vs. needs manual review), sortable on every column.
+- **Notes** — an optional note of your own on any transaction, shown wherever that transaction is
+  and included in the CSV export.
 - **Rule engine** — rules match on any combination of Details text, Transaction Type and exact
   amount, and auto-fill Property and Category on import.
 - **One-click rules from a transaction** — click **Rule** on any row to open an editor pre-filled
@@ -108,10 +110,14 @@ statements:
 | Valuation | market value and date, source, purchase price and date |
 | Tenancy | tenant and contact details, dates, rent and due day, deposit amount/scheme/reference, letting agent |
 
-These five live together under the property page's **Overview** panel, each showing the current
-record with its history underneath. Anything falling due within 90 days — a fixed rate ending, an
-insurance renewal, a tenancy ending — is flagged at the top of the page regardless of which panel is
-open.
+These five live together under the property page's **Overview** panel — the first one, because what
+this place *is* comes before what it cost — each showing the current record with its history
+underneath. Anything falling due within 90 days — a fixed rate ending, an insurance renewal, a
+tenancy ending — is flagged at the top of the page regardless of which panel is open.
+
+A section heading is just its name and a Change link. It used to carry a one-line summary beside it,
+which restated the first row or two of the record printed directly below: "Halifax · 3.89%" above a
+tile whose first lines are Lender: Halifax, Interest rate: 3.89%.
 
 The property page leads with the **property switcher as its title**: it already names the property
 you are reading, so a heading beside it only said the same thing twice. Its first entry is
@@ -210,9 +216,16 @@ every figure a lifetime total, which is almost never the question: widening the 
 whereas noticing that a number quietly covered eleven years is not.
 
 **Cashflow** — money in and out per month as stacked columns by category, on a single axis, sitting
-inside the monthly breakdown between the date control and the table. Hover or keyboard-focus a block
-for its figure; past eight categories the smallest fold into a neutral "Other", and the breakdown
-table below still itemises every one.
+inside the monthly breakdown between the date control and the table and stretching the full width of
+the page. Hover or keyboard-focus a block for its figure; past eight categories the smallest fold
+into a neutral "Other", and the breakdown table below still itemises every one.
+
+A dark line across the columns is the **net** of each month. The stack already showed income above
+the line and costs below it, but the *difference* — the figure that actually matters — was left to
+be eyeballed, or read off two floating labels that only ever annotated two of the months. The line
+states it for every bucket and makes the trend legible, which two numbers never could. It is drawn
+in ink rather than a palette colour: it is not one series among the others, it is what the others
+add up to, and borrowing a categorical hue would imply a category.
 
 The date range drives **both** the chart and the table. It used to drive only the table, with the
 chart always showing the full history — which meant picking a tax year moved the figures and left
@@ -468,6 +481,25 @@ either one keeps it — and filtering by a property *and* a category together sh
 holding that exact pair. "Unassigned" finds rows with no assignment at all, while "Uncategorised"
 also catches non-property rows, which are classified but carry no category.
 
+### Notes
+
+Every transaction can carry a **note of your own** — why a repair cost what it did, which tenant a
+part-payment came from, that you are still waiting on the invoice. Type it straight into the row on
+the Transactions tab.
+
+It sits under the bank's description rather than in a column of its own, because it is a gloss on
+what the row already says: "the second half of April's rent" belongs next to the payee, not eight
+columns away. It then appears **everywhere that transaction appears** — the property page's
+transaction list included — and in the CSV export, on the first line of a split, alongside `Balance`
+and for the same reason: the note belongs to the transaction, not to a share of it.
+
+An unfilled note field is invisible until you hover the row or tab into it. Hundreds of empty boxes
+down a statement would be worse than not having the feature.
+
+Saving a note is **not** an assignment. It goes through its own path, so writing "waiting on the
+invoice" against a row leaves the split intact and does not detach the rule that categorised it —
+which is what would happen if it were routed through the same code as picking a property by hand.
+
 ### On a phone
 
 The layout adapts by **viewport and pointer**, not by sniffing the user-agent string — the UA tells
@@ -562,6 +594,12 @@ Split transactions are shown in the Transactions table with a **Split** badge an
 (filter the status dropdown to **Split** to see them all). Editing one means editing the rule that
 split it — the **Rule** button on a split row opens that rule directly. Assigning a Property or
 Category by hand on a split row replaces the split with a single simple assignment.
+
+On a **property's own page** the same row shows only that property's shares, and the Amount column
+is its share rather than the whole payment: a £900 roof divided three ways reads as **£400**, with
+`of £900.00` underneath and a `1 of 3` badge. The whole figure in that column would not reconcile
+with anything else on the page. Sorting by Amount there sorts on the share, for the same reason —
+ranking rows by a number that isn't on screen is worse than not sorting at all.
 
 Downstream, a split behaves as its parts:
 

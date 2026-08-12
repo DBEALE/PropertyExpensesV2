@@ -91,15 +91,25 @@ function hideTooltip() {
  * @param {{key: string, label: string, slotClass: string, values: number[]}[]} options.series
  * @param {(value: number) => string} [options.format]
  * @param {string} [options.emptyMessage]
+ * @param {string} [options.netLabel] draw the per-bucket net as a line, named this
  */
-export function stackedColumns({ buckets, series, format = money, emptyMessage = 'Nothing to plot yet.' }) {
+export function stackedColumns({
+  buckets,
+  series,
+  format = money,
+  emptyMessage = 'Nothing to plot yet.',
+  netLabel = null,
+}) {
   if (buckets.length === 0 || series.length === 0) {
     return el('div', { class: 'empty' }, emptyMessage);
   }
 
-  const width = Math.max(360, Math.min(960, buckets.length * 64 + 80));
-  const height = 260;
-  const margin = { top: 16, right: 12, bottom: 34, left: 64 };
+  // The viewBox is a coordinate space, not a pixel size — the CSS stretches the
+  // svg to its container. Widening it with the number of buckets keeps the
+  // columns from smearing horizontally on a year of data.
+  const width = Math.max(720, buckets.length * 64 + 80);
+  const height = Math.round(width * 0.28);
+  const margin = { top: 20, right: 16, bottom: 34, left: 64 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
 
@@ -187,25 +197,48 @@ export function stackedColumns({ buckets, series, format = money, emptyMessage =
     return series.reduce((sum, s) => sum + Math.min(0, s.values[i] ?? 0), 0);
   }
 
-  // Direct labels are deliberately sparse: the most recent month and the
-  // biggest month, not a number on every column. The rest are in the tooltip
-  // and, exactly, in the table view below.
+  /**
+   * The net of each bucket, drawn as a line across the columns.
+   *
+   * The stack already shows income above the line and costs below it, but the
+   * *difference* — the thing that actually matters — was left to be eyeballed,
+   * or read off two floating text labels that only ever annotated two of the
+   * months. A line states it for every bucket and makes the trend legible,
+   * which two numbers never could.
+   */
   const nets = buckets.map((_, i) => series.reduce((sum, s) => sum + (s.values[i] ?? 0), 0));
-  const extremeIndex = nets.reduce((best, net, i) => (Math.abs(net) > Math.abs(nets[best]) ? i : best), 0);
-  const labelled = new Set([buckets.length - 1, extremeIndex]);
+  const netX = (i) => margin.left + band * i + band / 2;
+  const netMarks = [];
 
-  const netLabels = [...labelled].map((i) =>
-    svg(
-      'text',
-      {
-        x: margin.left + band * i + band / 2,
-        y: Math.max(10, yFor(maxUpAt(i)) - 6),
-        class: 'chart-value',
-        'text-anchor': 'middle',
-      },
-      format(nets[i]),
-    ),
-  );
+  if (netLabel) {
+    const points = nets.map((net, i) => `${netX(i)},${yFor(net)}`).join(' ');
+    netMarks.push(
+      svg('polyline', { points, class: 'net-line', 'aria-hidden': 'true' }),
+      // A single bucket has no line to speak of, so the dots carry it; they are
+      // also the hit targets for the tooltip either way.
+      ...nets.map((net, i) =>
+        svg('circle', {
+          cx: netX(i),
+          cy: yFor(net),
+          r: 3.5,
+          class: 'net-dot',
+          tabindex: '0',
+          role: 'img',
+          'aria-label': `${buckets[i].label}, ${netLabel}, ${format(net)}`,
+          onmousemove: (event) => showTooltip(event, [buckets[i].label, `${netLabel}: ${format(net)}`]),
+          onmouseleave: hideTooltip,
+          onfocus: (event) => {
+            const box = event.target.getBoundingClientRect();
+            showTooltip(
+              { clientX: box.left + box.width / 2, clientY: box.top },
+              [buckets[i].label, `${netLabel}: ${format(net)}`],
+            );
+          },
+          onblur: hideTooltip,
+        }),
+      ),
+    );
+  }
 
   return el(
     'div',
@@ -235,7 +268,6 @@ export function stackedColumns({ buckets, series, format = money, emptyMessage =
         ),
       ),
       ...marks,
-      ...netLabels,
       ...buckets.map((bucket, i) =>
         svg(
           'text',
@@ -255,6 +287,8 @@ export function stackedColumns({ buckets, series, format = money, emptyMessage =
         y2: zeroY,
         class: 'axis-line',
       }),
+      // Last, so the line sits over the columns it summarises.
+      ...netMarks,
     ),
   );
 }

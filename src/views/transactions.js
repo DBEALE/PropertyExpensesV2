@@ -165,6 +165,7 @@ export function renderTransactions(root, rerender) {
         rerender();
       },
       onAssign: (transaction, change) => void assign(transaction, change, rerender),
+      onNote: (transaction, notes) => void saveNote(transaction, notes, rerender),
       onCreateRule: (transaction) => createRuleFrom(transaction, rerender),
       onDelete: (transaction) => {
         if (!confirm('Delete this transaction?')) return;
@@ -204,6 +205,20 @@ function createRuleFrom(transaction, rerender) {
     transaction,
     onSaved: () => void reapplyRules().then(rerender),
   });
+}
+
+/**
+ * Saves a note.
+ *
+ * Pointedly *not* routed through `assign`: a note says nothing about which
+ * property the money belongs to, so it must not clear the rule that claimed
+ * the row or flatten a split the way a hand-made assignment does. Writing
+ * "waiting on the invoice" against a row should not silently recategorise it.
+ */
+async function saveNote(transaction, notes, rerender) {
+  if (String(transaction.notes ?? '') === notes) return;
+  await updateTransaction({ ...transaction, notes });
+  rerender();
 }
 
 /** @param {object} change partial property/category assignment */

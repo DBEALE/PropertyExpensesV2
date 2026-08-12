@@ -155,6 +155,7 @@ const CSV_EXPORT_COLUMNS = [
   'Balance',
   'Property',
   'Category',
+  'Notes',
 ];
 
 function escapeCsv(value) {
@@ -196,6 +197,10 @@ export function toCsv(transactions, propertyName) {
           i === 0 && t.balance !== null ? t.balance.toFixed(2) : '',
           propertyName(share.propertyId),
           share.category ?? '',
+          // On the first line only, like the balance: the note belongs to the
+          // transaction, and repeating it against every share of a split would
+          // read as several notes.
+          i === 0 ? (t.notes ?? '') : '',
         ]
           .map(escapeCsv)
           .join(','),

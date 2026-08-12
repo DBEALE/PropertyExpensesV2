@@ -19,6 +19,26 @@
 /** @type {Release[]} */
 export const RELEASES = [
   {
+    date: '2026-08-13',
+    title: 'Your own notes, and a chart that shows the bottom line',
+    points: [
+      'Every transaction can carry a note of your own — why a repair cost what it did, which tenant ' +
+        'a part-payment came from. Type it straight into the row on the Transactions tab; it then ' +
+        'appears wherever that transaction is shown, and in the CSV export.',
+      'A note never recategorises anything: writing “waiting on the invoice” against a split row ' +
+        'leaves the split and the rule that made it exactly as they were.',
+      'A property’s Transactions list now shows **that property’s share** of a split rather than the ' +
+        'whole payment. A £900 roof divided three ways reads as £400 here, with the total noted ' +
+        'underneath, so the column reconciles with the rest of the page.',
+      'The cashflow chart draws the monthly **net as a line** across the columns, replacing the two ' +
+        'floating figures that only ever annotated two of the months.',
+      'That chart now stretches to the full width of the page.',
+      'Overview is the first panel on a property — what this place is comes before what it cost.',
+      'The five record sections no longer repeat their own first line beside the heading: the ' +
+        'Mortgage tile said “Halifax · 3.89%” directly above Lender: Halifax, Interest rate: 3.89%.',
+    ],
+  },
+  {
     date: '2026-08-12',
     title: 'Reminders that clear themselves, and a backup you can trust',
     points: [

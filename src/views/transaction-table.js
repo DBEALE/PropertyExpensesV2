@@ -34,6 +34,11 @@ export const SORT_ACCESSORS = {
   status: (t) => statusLabel(t),
 };
 
+/** The note on a transaction, as text. Absent and blank are the same thing. */
+export function noteOf(transaction) {
+  return String(transaction.notes ?? '').trim();
+}
+
 /**
  * @param {object[]} transactions already filtered
  * @param {object} options
@@ -41,14 +46,22 @@ export const SORT_ACCESSORS = {
  * @param {(key: string) => void} options.onSort
  * @param {boolean} [options.readOnly] show values instead of dropdowns
  * @param {(transaction: object, change: object) => void} [options.onAssign]
+ * @param {(transaction: object, note: string) => void} [options.onNote]
  * @param {(transaction: object) => void} [options.onCreateRule]
  * @param {(transaction: object) => void} [options.onDelete]
+ * @param {string} [options.shareOf] property id: show that property's share of a
+ *   split transaction as the amount, rather than the whole transaction
  */
 export function transactionTable(transactions, options) {
-  const { sort, onSort, readOnly = false } = options;
+  const { sort, onSort, readOnly = false, shareOf = null } = options;
   const { categories } = getState();
   const properties = selectableProperties(getState().properties);
-  const rows = sortRows(transactions, sort, SORT_ACCESSORS);
+  // When only one property's share is shown, Amount has to sort on that share
+  // — otherwise clicking the column would rank rows by a figure not on screen.
+  const accessors = shareOf
+    ? { ...SORT_ACCESSORS, amount: (t) => amountShown(t) }
+    : SORT_ACCESSORS;
+  const rows = sortRows(transactions, sort, accessors);
   // The badge shows the same number the Rules table does.
   const positions = rulePositions(getState().rules);
 
@@ -140,7 +153,7 @@ export function transactionTable(transactions, options) {
       'tr',
       { 'data-transaction': transaction.id },
       el('td', {}, ukDate(transaction.date)),
-      el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
+      detailsCell(transaction),
       el('td', {}, transaction.transactionType),
       el('td', { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` }, money(transaction.amount)),
       propertyCell,
@@ -150,9 +163,53 @@ export function transactionTable(transactions, options) {
     );
   }
 
-  /** A transaction split across properties: one line per share. */
+  /**
+   * The bank's description, with your own note under it.
+   *
+   * The note lives here rather than in a column of its own because it is a
+   * gloss on what the row already says — "which tenant this part-payment was
+   * from" belongs next to the payee, not eight columns away. It shows on every
+   * screen that shows the transaction; only the editable table offers the
+   * field, since the property page is deliberately read-only.
+   */
+  function detailsCell(transaction) {
+    const note = noteOf(transaction);
+    return el(
+      'td',
+      { class: 'details', title: transaction.sourceFilename },
+      transaction.details,
+      readOnly
+        ? note
+          ? el('div', { class: 'note' }, note)
+          : null
+        : el('input', {
+            class: `note-input${note ? '' : ' empty'}`,
+            type: 'text',
+            value: note,
+            placeholder: 'Add a note',
+            'aria-label': `Note for ${transaction.details}`,
+            // On change, not on input: a re-render per keystroke would take the
+            // focus out of the box being typed into.
+            onchange: (event) => options.onNote?.(transaction, event.target.value.trim()),
+          }),
+    );
+  }
+
+  /**
+   * A transaction split across properties.
+   *
+   * Normally one line per share, showing the whole transaction and how it was
+   * divided. But on a property's own page — where `shareOf` names that property
+   * — only its own shares are shown, and the Amount column is that property's
+   * cost rather than the total. A £900 roof split three ways cost this property
+   * £300, and £900 in its column would not add up to anything it recognises.
+   */
   function splitRow(transaction) {
-    const shares = transaction.allocations;
+    const all = transaction.allocations;
+    const shares = sharesShown(transaction);
+    const partial = shares.length < all.length;
+    const shown = amountShown(transaction);
+
     const cell = (render) =>
       el('td', {}, ...shares.map((share) => el('div', { class: 'share' }, render(share))));
 
@@ -160,17 +217,24 @@ export function transactionTable(transactions, options) {
       'tr',
       { class: 'row-split', 'data-transaction': transaction.id },
       el('td', {}, ukDate(transaction.date)),
-      el('td', { class: 'details', title: transaction.sourceFilename }, transaction.details),
+      detailsCell(transaction),
       el('td', {}, transaction.transactionType),
       el(
         'td',
-        { class: `num ${transaction.amount < 0 ? 'out' : 'in'}` },
-        money(transaction.amount),
-        el(
-          'div',
-          { class: 'share-amounts' },
-          ...shares.map((s) => el('div', { class: 'share' }, money(s.amount))),
-        ),
+        { class: `num ${shown < 0 ? 'out' : 'in'}` },
+        money(shown),
+        // Only worth breaking down when there is more than one line to break
+        // into; a single share already has its figure above.
+        shares.length > 1
+          ? el(
+              'div',
+              { class: 'share-amounts' },
+              ...shares.map((s) => el('div', { class: 'share' }, money(s.amount))),
+            )
+          : null,
+        partial
+          ? el('div', { class: 'share' }, `of ${money(transaction.amount)}`)
+          : null,
       ),
       cell((share) => entityTag(propertyName(share.propertyId), propertySlot(share.propertyId))),
       cell((share) => entityTag(categoryName(share.category), categorySlot(share.category))),
@@ -180,11 +244,23 @@ export function transactionTable(transactions, options) {
         el(
           'span',
           { class: 'badge badge-split', title: describeSplit(transaction) },
-          `Split ${shares.length}`,
+          partial ? `${shares.length} of ${all.length}` : `Split ${all.length}`,
         ),
       ),
       readOnly ? null : actionsCell(transaction),
     );
+  }
+
+  /** The shares of a split this table is showing — all of them, or one property's. */
+  function sharesShown(transaction) {
+    const all = transaction.allocations ?? [];
+    return shareOf ? all.filter((s) => s.propertyId === shareOf) : all;
+  }
+
+  /** The figure in the Amount column: the whole transaction, or one share of it. */
+  function amountShown(transaction) {
+    if (!shareOf || !hasSplit(transaction)) return transaction.amount;
+    return sharesShown(transaction).reduce((sum, s) => sum + s.amount, 0);
   }
 
   function tagFor(propertyId, category, which) {

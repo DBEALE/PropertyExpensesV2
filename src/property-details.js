@@ -23,7 +23,6 @@ export const SECTIONS = [
   {
     key: 'address',
     label: 'Address',
-    summary: (d) => [d.line1, d.town, d.postcode].filter(Boolean).join(', '),
     fields: [
       { key: 'line1', label: 'Address line 1', type: 'text' },
       { key: 'line2', label: 'Address line 2', type: 'text' },
@@ -36,7 +35,6 @@ export const SECTIONS = [
   {
     key: 'insurance',
     label: 'Insurance',
-    summary: (d) => [d.provider, d.coverLevel].filter(Boolean).join(' · '),
     fields: [
       { key: 'provider', label: 'Provider', type: 'text' },
       { key: 'policyNumber', label: 'Policy number', type: 'text' },
@@ -54,10 +52,6 @@ export const SECTIONS = [
   {
     key: 'mortgage',
     label: 'Mortgage',
-    summary: (d) =>
-      isTrue(d.ownedOutright)
-        ? 'Owned outright'
-        : [d.lender, d.rate !== undefined && d.rate !== '' ? `${d.rate}%` : null].filter(Boolean).join(' · '),
     fields: [
       {
         key: 'ownedOutright',
@@ -83,7 +77,6 @@ export const SECTIONS = [
   {
     key: 'valuation',
     label: 'Valuation',
-    summary: (d) => (d.value ? `Valued ${d.value}` : ''),
     fields: [
       { key: 'value', label: 'Market value', type: 'money' },
       { key: 'valuedOn', label: 'Valued on', type: 'date' },
@@ -96,7 +89,6 @@ export const SECTIONS = [
   {
     key: 'tenancy',
     label: 'Tenancy',
-    summary: (d) => [d.tenantName, d.rentAmount ? `${d.rentAmount} pcm` : null].filter(Boolean).join(' · '),
     fields: [
       { key: 'tenantName', label: 'Tenant', type: 'text' },
       { key: 'tenantPhone', label: 'Tenant phone', type: 'text' },
