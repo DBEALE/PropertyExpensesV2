@@ -104,6 +104,31 @@ export function completionHistory(completions, propertyId, complianceTypeId) {
 }
 
 /**
+ * How close a certificate is to being a problem. A single vocabulary, so the
+ * banner, the table and the tab badge cannot disagree about what "due soon"
+ * means.
+ */
+export const DUE_SOON_DAYS = 30;
+
+/** The id of the exemption record for one property and one type. */
+export function exemptionId(propertyId, complianceTypeId) {
+  return `${propertyId}::${complianceTypeId}`;
+}
+
+/**
+ * True when a certificate does not apply to this property at all — a gas
+ * safety certificate on an all-electric flat, a PAT test where nothing
+ * electrical is supplied.
+ *
+ * This is deliberately not the same as "never recorded". Never recorded is a
+ * gap to be filled; not applicable is a question that has been answered, and
+ * an app that keeps asking it is training you to ignore it.
+ */
+export function isExempt(exemptions, propertyId, complianceTypeId) {
+  return exemptions.some((e) => e.propertyId === propertyId && e.complianceTypeId === complianceTypeId);
+}
+
+/**
  * Where a property stands on every compliance type.
  *
  * A type never logged for this property has no due date — it is reported as
@@ -115,17 +140,23 @@ export function completionHistory(completions, propertyId, complianceTypeId) {
  * @param {string} propertyId
  * @param {string} today ISO date, so callers control "now" rather than the clock
  */
-export function complianceStatus(types, completions, propertyId, today) {
+export function complianceStatus(types, completions, propertyId, today, exemptions = []) {
+  const soonLimit = addDays(today, DUE_SOON_DAYS);
   return types.map((type) => {
     const last = lastCompletion(completions, propertyId, type.id);
     const due = nextDue(last?.completedDate ?? null, type.frequencyMonths);
+    const exempt = isExempt(exemptions, propertyId, type.id);
     return {
       type,
       lastCompletion: last,
       lastCompletedDate: last?.completedDate ?? null,
       nextDue: due,
       neverRecorded: last === null,
-      overdue: due !== null && due < today,
+      exempt,
+      // An exempt certificate has no deadline to miss, so it is neither
+      // overdue nor approaching however long ago it was last done.
+      overdue: !exempt && due !== null && due < today,
+      dueSoon: !exempt && due !== null && due >= today && due <= soonLimit,
       history: completionHistory(completions, propertyId, type.id),
     };
   });
@@ -138,18 +169,23 @@ export function complianceStatus(types, completions, propertyId, today) {
  * Overdue items are included regardless of the window — something already late
  * is more urgent than anything merely approaching, so it must not drop out.
  *
- * @returns {{label: string, date: string, section: string, overdue: boolean}[]}
+ * `dueSoon` marks the ones inside DUE_SOON_DAYS, which read as a warning
+ * rather than as one more thing on a 90-day list — 28 days to arrange a gas
+ * engineer is a different kind of fact from 80 days.
+ *
+ * @returns {{label: string, date: string, section: string, overdue: boolean, dueSoon: boolean}[]}
  */
-export function upcomingCompliance(types, completions, propertyId, today, withinDays = 90) {
+export function upcomingCompliance(types, completions, propertyId, today, withinDays = 90, exemptions = []) {
   const limit = addDays(today, withinDays);
-  return complianceStatus(types, completions, propertyId, today)
-    .filter((status) => status.nextDue !== null)
+  return complianceStatus(types, completions, propertyId, today, exemptions)
+    .filter((status) => !status.exempt && status.nextDue !== null)
     .filter((status) => status.overdue || (status.nextDue >= today && status.nextDue <= limit))
     .map((status) => ({
       label: status.type.name,
       date: status.nextDue,
       section: 'compliance',
       overdue: status.overdue,
+      dueSoon: status.dueSoon,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }

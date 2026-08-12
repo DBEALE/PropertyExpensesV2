@@ -190,8 +190,11 @@ describe('upcomingCompliance', () => {
   });
 
   it('matches the shape of upcomingDates so the two can be merged', () => {
+    // `dueSoon` is the extra grade: a date inside 30 days is a warning, where
+    // one 80 days out is only information. A dated record has no equivalent,
+    // so callers merging the two treat a missing flag as false.
     const [item] = upcomingCompliance(TYPES, completions, 'p1', '2026-08-01', 90);
-    assert.deepEqual(Object.keys(item).sort(), ['date', 'label', 'overdue', 'section']);
+    assert.deepEqual(Object.keys(item).sort(), ['date', 'dueSoon', 'label', 'overdue', 'section']);
   });
 
   it('says nothing for a property with no completions logged', () => {
@@ -241,6 +244,42 @@ describe('backup of compliance data', () => {
     const restored = validateBackup(older);
     assert.deepEqual(restored.complianceTypes, []);
     assert.deepEqual(restored.complianceCompletions, []);
+    assert.deepEqual(restored.complianceExemptions, []);
+  });
+
+  it('round-trips which certificates a property is exempt from', () => {
+    const withExemptions = {
+      ...state,
+      complianceExemptions: [
+        { id: 'p1::gas-safety-certificate', propertyId: 'p1', complianceTypeId: 'gas-safety-certificate' },
+      ],
+    };
+    const file = JSON.parse(JSON.stringify(buildBackup(withExemptions, '2026-08-01T00:00:00Z')));
+    const restored = validateBackup(file);
+    assert.equal(restored.complianceExemptions.length, 1);
+    assert.equal(restored.complianceExemptions[0].complianceTypeId, 'gas-safety-certificate');
+  });
+
+  it('rejects an exemption pointing at a type or property the file does not contain', () => {
+    // The same rule as completions: a row referring to nothing would show up
+    // as a certificate silently not being tracked, with no way to see why.
+    const withGhost = (exemption) => {
+      const file = JSON.parse(
+        JSON.stringify(buildBackup({ ...state, complianceExemptions: [exemption] }, '2026-08-01T00:00:00Z')),
+      );
+      return () => validateBackup(file);
+    };
+    assert.throws(
+      withGhost({ id: 'x', propertyId: 'ghost', complianceTypeId: 'gas-safety-certificate' }),
+      /compliance exemptions/i,
+    );
+    assert.throws(withGhost({ id: 'x', propertyId: 'p1', complianceTypeId: 'vanished' }), /compliance exemptions/i);
+  });
+
+  it('accepts a backup written before exemptions existed as "everything applies"', () => {
+    const file = backup();
+    delete file.complianceExemptions;
+    assert.deepEqual(validateBackup(file).complianceExemptions, []);
   });
 });
 

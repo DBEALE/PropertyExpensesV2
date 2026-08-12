@@ -3,19 +3,13 @@
  * tenancy — each kept as a dated record, with everything it replaced still
  * readable underneath.
  */
-import {
-  accountSummary,
-  isOverdue,
-  monthlyTotals,
-  paymentStreams,
-  sharesFor,
-  streamState,
-} from '../accounts.js';
+import { accountSummary, monthlyTotals, paymentStreams, sharesFor, streamState } from '../accounts.js';
 import { sumAllocations } from '../allocation.js';
+import { attentionFor, tenancyStart } from '../attention.js';
 import { capSeries, legend, stackedColumns } from '../charts.js';
-import { complianceStatus, upcomingCompliance } from '../compliance.js';
-import { addMonths, taxYearRange } from '../dates.js';
-import { taxYearLabel, taxYearOf } from '../date-presets.js';
+import { DUE_SOON_DAYS, complianceStatus } from '../compliance.js';
+import { addDays, addMonths, taxYearRange } from '../dates.js';
+import { currentTaxYearRange, taxYearLabel, taxYearOf } from '../date-presets.js';
 import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { ANY, filterTransactions } from '../transaction-filter.js';
@@ -27,8 +21,8 @@ import {
   currentRecord,
   equity,
   historyFor,
+  isTrue,
   loanToValue,
-  upcomingDates,
 } from '../property-details.js';
 import {
   deleteComplianceCompletion,
@@ -36,17 +30,22 @@ import {
   getState,
   saveComplianceCompletion,
   savePropertyDetail,
+  setComplianceExempt,
 } from '../store.js';
 
 /** Which section is open for editing, so a re-render doesn't close it. */
 let editing = null;
 /** Oldest month first, so a year of figures reads chronologically. */
 const matrixSort = { key: 'month', dir: 'asc' };
-/** State for the read-only transaction list at the foot of the page. */
+/** State for the read-only transaction list panel. */
 const listSort = { key: 'date', dir: 'desc' };
 const listFilter = { category: ANY };
-/** Date range for the monthly breakdown table, kept across re-renders. */
-const breakdownRange = { from: '', to: '' };
+/**
+ * Date ranges, kept across re-renders. Both open on the tax year in progress
+ * rather than on everything ever imported — see `currentTaxYearRange`.
+ */
+const breakdownRange = { ...currentTaxYearRange() };
+const listRange = { ...currentTaxYearRange() };
 /** Sort state for the cross-property overview table. */
 const overviewSort = { key: 'name', dir: 'asc' };
 const insuranceSort = { key: 'name', dir: 'asc' };
@@ -115,21 +114,16 @@ export function resolveSelectedProperty(properties, requestedId, rememberedId) {
   return properties.find((p) => p.id === rememberedId) ?? OVERVIEW;
 }
 
-/**
- * When the current tenancy began — the tenant's own start date if recorded,
- * otherwise the date the record took effect. Used to retire a former tenant's
- * rent so they are never reported as owing money.
- *
- * @returns {string|null} ISO date
- */
-function tenancyStart(details, propertyId) {
-  const tenancy = currentRecord(details, propertyId, 'tenancy');
-  if (!tenancy) return null;
-  return tenancy.data?.startDate || tenancy.effectiveFrom || null;
-}
-
 export function renderProperty(root, rerender, propertyId) {
-  const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
+  const state = getState();
+  const {
+    properties,
+    propertyDetails,
+    complianceTypes,
+    complianceCompletions,
+    complianceExemptions,
+    transactions,
+  } = state;
 
   if (properties.length === 0) {
     root.append(
@@ -202,25 +196,33 @@ export function renderProperty(root, rerender, propertyId) {
   // tenant is never reported as owing money.
   const streamOptions = { tenancyFrom: tenancyStart(propertyDetails, propertyId) };
   const streams = paymentStreams(sharesFor(transactions, propertyId), today).filter((s) => s.recurring);
-  const lateStreams = streams.filter((s) => isOverdue(s, today, streamOptions));
+  const attention = attentionFor(state, propertyId, today, 90);
 
-  renderComingUp(root, {
-    dated: upcomingDates(propertyDetails, propertyId, today, 90),
-    compliance: upcomingCompliance(complianceTypes, complianceCompletions, propertyId, today, 90),
-    lateStreams,
-    today,
+  renderComingUp(root, attention, today, () => {
+    openPanel = 'details';
+    rerender();
   });
 
   const shares = sharesFor(transactions, propertyId);
   const { categories } = getState();
-  const statuses = complianceStatus(complianceTypes, complianceCompletions, property.id, today);
+  const statuses = complianceStatus(
+    complianceTypes,
+    complianceCompletions,
+    property.id,
+    today,
+    complianceExemptions,
+  );
   const ownTransactions = filterTransactions(transactions, { propertyId: property.id });
 
   const summaries = panelSummaries({
     shares,
     categories,
+    // Each summary describes what its own panel would show, filters and all,
+    // so opening one never contradicts the line that made you open it.
+    range: breakdownRange,
+    listRange,
     streams,
-    lateStreams,
+    lateStreams: attention.lateStreams,
     statuses,
     transactions: ownTransactions,
     property,
@@ -236,11 +238,26 @@ export function renderProperty(root, rerender, propertyId) {
   else if (openPanel === 'recurring') renderRecurring(body, streams, today, streamOptions);
   else if (openPanel === 'compliance') renderCompliance(body, property, statuses, today, rerender);
   else if (openPanel === 'transactions') renderTransactionList(body, rerender, transactions, property);
-  else {
-    for (const section of SECTIONS) {
-      body.append(renderSection(section, property, propertyDetails, rerender));
-    }
-  }
+  else renderDetailSections(body, property, propertyDetails, rerender);
+}
+
+/**
+ * The five dated record sections, tiled rather than stacked.
+ *
+ * Run down the page one per row they were five screens of mostly-empty space;
+ * side by side they fit on one, and "what do I know about this property" is
+ * answerable without scrolling. A section being edited takes the full width,
+ * because a form squeezed into a third of the row is worse than a row that
+ * momentarily reflows.
+ */
+function renderDetailSections(root, property, propertyDetails, rerender) {
+  root.append(
+    el(
+      'div',
+      { class: 'detail-tiles' },
+      ...SECTIONS.map((section) => renderSection(section, property, propertyDetails, rerender)),
+    ),
+  );
 }
 
 /**
@@ -343,8 +360,8 @@ function roughMoney(amount) {
  * Reads the same date range as the table inside, so opening the panel never
  * contradicts the line that persuaded you to open it.
  */
-function breakdownSummary({ shares, categories }) {
-  const months = monthlyTotals(sharesInBreakdownRange(shares));
+function breakdownSummary({ shares, categories, range }) {
+  const months = monthlyTotals(sharesInRange(shares, range));
   if (months.length === 0) return 'Nothing categorised against this property yet';
 
   const withRent = months.filter((m) => m.income > 0).length;
@@ -371,12 +388,14 @@ function breakdownSummary({ shares, categories }) {
   return clauses(rent, ...spend, `net ${roughMoney(net)}`);
 }
 
-/** The shares the Monthly breakdown panel would show, given its current range. */
-function sharesInBreakdownRange(shares) {
+/**
+ * The shares inside a date range. Passed the range rather than reading the
+ * module's own, so the summary and the table can be handed the same one and a
+ * test can hand it a different one.
+ */
+function sharesInRange(shares, range = {}) {
   return shares.filter(
-    (s) =>
-      (!breakdownRange.from || s.transaction.date >= breakdownRange.from) &&
-      (!breakdownRange.to || s.transaction.date <= breakdownRange.to),
+    (s) => (!range.from || s.transaction.date >= range.from) && (!range.to || s.transaction.date <= range.to),
   );
 }
 
@@ -404,26 +423,49 @@ function recurringSummary({ streams, lateStreams, today, streamOptions }) {
 function complianceSummary({ statuses }) {
   if (statuses.length === 0) return 'No compliance types set up yet';
 
-  const overdue = statuses.filter((s) => s.overdue).length;
-  const never = statuses.filter((s) => s.neverRecorded).length;
-  const next = statuses
-    .filter((s) => !s.overdue && s.nextDue !== null)
+  // An exempt certificate is not tracked, not late and not a gap — it has been
+  // answered, so it drops out of every count except its own.
+  const tracked = statuses.filter((s) => !s.exempt);
+  const exempt = statuses.length - tracked.length;
+  if (tracked.length === 0) return `None apply to this property · ${exempt} marked not applicable`;
+
+  const overdue = tracked.filter((s) => s.overdue).length;
+  const soon = tracked.filter((s) => s.dueSoon).length;
+  const never = tracked.filter((s) => s.neverRecorded).length;
+  const next = tracked
+    .filter((s) => !s.overdue && !s.dueSoon && s.nextDue !== null)
     .map((s) => s.nextDue)
     .sort()[0];
 
   return clauses(
-    `${statuses.length} certificate${statuses.length === 1 ? '' : 's'} tracked`,
+    `${tracked.length} certificate${tracked.length === 1 ? '' : 's'} tracked`,
     overdue > 0 ? `${overdue} overdue` : null,
+    soon > 0 ? `${soon} due within ${DUE_SOON_DAYS} days` : null,
     never > 0 ? `${never} never logged` : null,
-    overdue === 0 && next ? `next due ${ukDate(next)}` : null,
+    overdue === 0 && soon === 0 && next ? `next due ${ukDate(next)}` : null,
+    exempt > 0 ? `${exempt} not applicable` : null,
   );
 }
 
-function transactionsSummary({ transactions }) {
+/**
+ * Counts what the panel would list, which is the range it is filtered to — and
+ * says how much is being left out, so a tax-year default never looks like a
+ * property with fewer transactions than it has.
+ */
+function transactionsSummary({ transactions, listRange }) {
   if (transactions.length === 0) return 'Nothing assigned to this property yet';
-  const latest = transactions.map((t) => t.date).sort().at(-1);
+
+  const inRange = transactions.filter(
+    (t) => (!listRange?.from || t.date >= listRange.from) && (!listRange?.to || t.date <= listRange.to),
+  );
+  if (inRange.length === 0) {
+    return `None in the selected range · ${transactions.length} in total`;
+  }
+
+  const latest = inRange.map((t) => t.date).sort().at(-1);
   return clauses(
-    `${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`,
+    `${inRange.length} transaction${inRange.length === 1 ? '' : 's'}`,
+    inRange.length < transactions.length ? `of ${transactions.length} in total` : null,
     `latest ${ukDate(latest)}`,
   );
 }
@@ -461,7 +503,8 @@ function listing(items) {
  * per-property compliance work deliberately left for later.
  */
 function renderOverview(root, rerender) {
-  const { properties, propertyDetails, complianceTypes, complianceCompletions, transactions } = getState();
+  const state = getState();
+  const { properties, propertyDetails, transactions } = state;
   const today = new Date().toISOString().slice(0, 10);
 
   // Net is the *current tax year* rather than everything ever imported: on this
@@ -477,26 +520,28 @@ function renderOverview(root, rerender) {
     const shares = sharesFor(transactions, property.id);
     const mortgage = currentRecord(propertyDetails, property.id, 'mortgage');
     const valuation = currentRecord(propertyDetails, property.id, 'valuation');
-    const overdueStreams = paymentStreams(shares, today).filter(
-      (s) => s.recurring && isOverdue(s, today, { tenancyFrom: tenancyStart(propertyDetails, property.id) }),
-    );
-    const compliance = upcomingCompliance(complianceTypes, complianceCompletions, property.id, today, 90);
-    const dated = upcomingDates(propertyDetails, property.id, today, 90);
+    // The same tally the tab badge and the property banner use, so the three
+    // can never disagree about how much this property wants doing.
+    const attention = attentionFor(state, property.id, today, 90);
     // One list of everything approaching, so "next due" is the true next thing.
-    const upcoming = [...compliance, ...dated.map((d) => ({ ...d, overdue: false }))].sort((a, b) =>
+    const upcoming = [...attention.soonCompliance, ...attention.upcoming].sort((a, b) =>
       a.date.localeCompare(b.date),
     );
+    const outright = isTrue(mortgage?.data?.ownedOutright);
 
     return {
       property,
       value: valuation ? number(valuation.data.value) : null,
-      debt: mortgage ? number(mortgage.data.amount) : null,
+      // Owned outright is a debt of zero, which is a figure; an em dash here
+      // would read as "not entered" and quietly drop out of the portfolio total.
+      debt: outright ? 0 : mortgage ? number(mortgage.data.amount) : null,
       ltv: loanToValue(mortgage, valuation),
       equity: equity(mortgage, valuation),
       net: accountSummary(shares.filter(inTaxYear)).net,
-      attention: overdueStreams.length + compliance.filter((c) => c.overdue).length,
-      overdueStreams,
-      next: upcoming.find((u) => !u.overdue) ?? null,
+      attention: attention.count,
+      overdueStreams: attention.lateStreams,
+      soonCount: attention.soonCount,
+      next: upcoming[0] ?? null,
     };
   });
 
@@ -517,10 +562,11 @@ function renderOverview(root, rerender) {
   );
 
   if (needingAttention.length > 0) {
+    const anyOverdue = needingAttention.some((r) => r.attention > r.soonCount);
     root.append(
       el(
         'div',
-        { class: 'notice attention attention-overdue' },
+        { class: `notice attention ${anyOverdue ? 'attention-overdue' : 'attention-soon'}` },
         el(
           'div',
           { class: 'attention-group' },
@@ -528,22 +574,36 @@ function renderOverview(root, rerender) {
           el(
             'ul',
             {},
-            ...needingAttention.map((row) =>
-              el(
+            ...needingAttention.map((row) => {
+              // The badge takes the colour of the worst thing on the row, and
+              // the text says which — "compliance overdue" on a property whose
+              // only issue is a certificate due next month would be a lie.
+              const overdueCount = row.attention - row.soonCount;
+              const reasons = [
+                row.overdueStreams.length > 0
+                  ? `${row.overdueStreams.map((s) => s.label).join(', ')} not received`
+                  : null,
+                overdueCount - row.overdueStreams.length > 0 ? 'compliance overdue' : null,
+                row.soonCount > 0 ? `${row.soonCount} due within ${DUE_SOON_DAYS} days` : null,
+              ].filter(Boolean);
+
+              return el(
                 'li',
                 {},
-                el('span', { class: 'badge badge-overdue' }, String(row.attention)),
+                el(
+                  'span',
+                  { class: `badge ${overdueCount > 0 ? 'badge-overdue' : 'badge-soon'}` },
+                  String(row.attention),
+                ),
                 ' ',
                 el(
                   'button',
                   { class: 'link', onclick: () => openProperty(row.property.id) },
                   row.property.name,
                 ),
-                row.overdueStreams.length > 0
-                  ? ` — ${row.overdueStreams.map((s) => s.label).join(', ')} not received`
-                  : ' — compliance overdue',
-              ),
-            ),
+                ` — ${reasons.join(', ')}`,
+              );
+            }),
           ),
         ),
       ),
@@ -624,7 +684,11 @@ function renderOverview(root, rerender) {
               { class: 'num' },
               row.attention === 0
                 ? el('span', { class: 'unset' }, '—')
-                : el('span', { class: 'badge badge-overdue' }, String(row.attention)),
+                : el(
+                    'span',
+                    { class: `badge ${row.attention > row.soonCount ? 'badge-overdue' : 'badge-soon'}` },
+                    String(row.attention),
+                  ),
             ),
             el(
               'td',
@@ -675,13 +739,17 @@ function renderOverview(root, rerender) {
 
   renderInsuranceOverview(root, rerender, properties, propertyDetails, today);
   renderTenancyOverview(root, rerender, properties, propertyDetails, today);
-  renderComplianceOverview(root, rerender, properties, complianceTypes, complianceCompletions, today);
+  renderComplianceOverview(root, rerender, properties, state, today);
 }
 
 /**
  * How a date reads: already gone, close enough to act on, or far enough away
  * to ignore. Used for renewal, tenancy-end and certificate dates alike so they
  * all mean the same thing at a glance.
+ *
+ * The tint runs to three months, but only the DUE_SOON_DAYS window earns a
+ * badge — the same boundary the attention banner and the tab badge use, so
+ * "due soon" means one thing everywhere in the app.
  */
 function dueClass(date, today) {
   if (!date) return '';
@@ -693,12 +761,13 @@ function dueClass(date, today) {
 function dueCell(date, today, missing = '—') {
   if (!date) return el('td', {}, el('span', { class: 'unset' }, missing));
   const state = dueClass(date, today);
-  return el(
-    'td',
-    { class: state },
-    ukDate(date),
-    state === 'due-overdue' ? el('span', { class: 'badge badge-overdue' }, 'Overdue') : null,
-  );
+  const badge =
+    state === 'due-overdue'
+      ? el('span', { class: 'badge badge-overdue' }, 'Overdue')
+      : date <= addDays(today, DUE_SOON_DAYS)
+        ? el('span', { class: 'badge badge-soon' }, 'Due soon')
+        : null;
+  return el('td', { class: state }, ukDate(date), badge);
 }
 
 /** A property name that drills into its page, for the secondary tables. */
@@ -871,7 +940,8 @@ function renderTenancyOverview(root, rerender, properties, details, today) {
  * "which properties need a gas safety check", which is the question that
  * actually gets asked.
  */
-function renderComplianceOverview(root, rerender, properties, types, completions, today) {
+function renderComplianceOverview(root, rerender, properties, state, today) {
+  const { complianceTypes: types, complianceCompletions: completions, complianceExemptions: exemptions } = state;
   root.append(el('div', { class: 'toolbar' }, el('h3', {}, 'Compliance')));
 
   if (types.length === 0) {
@@ -884,7 +954,7 @@ function renderComplianceOverview(root, rerender, properties, types, completions
   const rows = properties.map((property) => ({
     property,
     statuses: new Map(
-      complianceStatus(types, completions, property.id, today).map((s) => [s.type.id, s]),
+      complianceStatus(types, completions, property.id, today, exemptions).map((s) => [s.type.id, s]),
     ),
   }));
 
@@ -927,6 +997,9 @@ function renderComplianceOverview(root, rerender, properties, types, completions
             drillCell(row.property),
             ...types.map((type) => {
               const status = row.statuses.get(type.id);
+              // Not applicable outranks never recorded: the question has been
+              // answered, so the column should not read as a gap here either.
+              if (status?.exempt) return el('td', {}, el('span', { class: 'badge' }, 'N/A'));
               if (!status || status.neverRecorded) {
                 return el('td', {}, el('span', { class: 'unset' }, 'never recorded'));
               }
@@ -1007,19 +1080,40 @@ function renderCashflow(root, months, categories) {
  * property.
  */
 function renderTransactionList(root, rerender, transactions, property) {
-  const visible = filterTransactions(transactions, { propertyId: property.id, category: listFilter.category });
+  // The year shortcuts come from this property's own transactions, so the list
+  // never offers a year this property has nothing in.
+  const own = filterTransactions(transactions, { propertyId: property.id });
+  const visible = filterTransactions(own, {
+    category: listFilter.category,
+    from: listRange.from,
+    to: listRange.to,
+  });
 
   root.append(
     el(
       'div',
       { class: 'toolbar' },
       el('h3', {}, 'Transactions'),
-      el('span', { class: 'count' }, `${visible.length} shown`),
+      el('span', { class: 'count' }, `${visible.length} of ${own.length} shown`),
       categoryFilter(listFilter.category, (value) => {
         listFilter.category = value;
         rerender();
       }),
       el('a', { class: 'link', href: '#/transactions' }, 'Edit on the Transactions tab'),
+    ),
+    el(
+      'div',
+      { class: 'filter-bar' },
+      ...dateRangeControls({
+        transactions: own,
+        from: listRange.from,
+        to: listRange.to,
+        onChange: ({ from, to }) => {
+          listRange.from = from;
+          listRange.to = to;
+          rerender();
+        },
+      }),
     ),
   );
 
@@ -1041,38 +1135,49 @@ function renderTransactionList(root, rerender, transactions, property) {
 }
 
 /**
- * One banner for everything wanting attention, sorted by date.
+ * One banner for everything wanting attention, in four grades.
  *
- * Overdue items read differently from merely-upcoming ones and are listed
- * first regardless of date — "the gas certificate lapsed three weeks ago" is a
- * different kind of fact from "insurance renews in September", and the old
- * banner drew no distinction at all.
+ * Each grade is a different kind of fact and they are never mixed: "the gas
+ * certificate lapsed three weeks ago" is not the same as "it runs out in
+ * three weeks", which is not the same as "insurance renews in September",
+ * which is not the same as "you have never told me who the tenant is". The
+ * banner used to draw only the first two distinctions, so a certificate due in
+ * a fortnight sat in the same list as one due in three months.
+ *
+ * @param {ReturnType<import('../attention.js').attentionFor>} attention
+ * @param {() => void} openDetails takes the reader to the records to fill in
  */
-function renderComingUp(root, { dated, compliance, lateStreams, today }) {
-  const items = [
-    ...lateStreams.map((stream) => ({
+function renderComingUp(root, attention, today, openDetails) {
+  const overdue = [
+    ...attention.lateStreams.map((stream) => ({
       label: `${stream.label} not received`,
-      date: stream.nextExpected,
-      overdue: true,
+      // A stream's own "due" date is the month after it last arrived, which is
+      // the date it actually failed to turn up.
       since: addMonths(stream.lastDate, 1),
     })),
-    ...compliance.map((item) => ({ ...item, since: item.date })),
-    ...dated.map((item) => ({ ...item, overdue: false })),
-  ];
-  if (items.length === 0) return;
+    ...attention.overdueCompliance.map((item) => ({ label: item.label, since: item.date })),
+  ].sort((a, b) => a.since.localeCompare(b.since));
 
-  const overdue = items.filter((i) => i.overdue).sort((a, b) => a.since.localeCompare(b.since));
-  const soon = items.filter((i) => !i.overdue).sort((a, b) => a.date.localeCompare(b.date));
+  const soon = [...attention.soonCompliance].sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = [...attention.upcoming].sort((a, b) => a.date.localeCompare(b.date));
+  const missing = attention.missing;
+
+  if (overdue.length + soon.length + upcoming.length + missing.length === 0) return;
+
+  const group = (heading, ...children) =>
+    el('div', { class: 'attention-group' }, el('strong', {}, heading), ...children);
 
   root.append(
     el(
       'div',
-      { class: `notice attention${overdue.length > 0 ? ' attention-overdue' : ''}` },
+      {
+        class:
+          `notice attention${overdue.length > 0 ? ' attention-overdue' : ''}` +
+          `${overdue.length === 0 && soon.length > 0 ? ' attention-soon' : ''}`,
+      },
       overdue.length > 0
-        ? el(
-            'div',
-            { class: 'attention-group' },
-            el('strong', {}, 'Needs attention'),
+        ? group(
+            'Needs attention',
             el(
               'ul',
               {},
@@ -1088,14 +1193,39 @@ function renderComingUp(root, { dated, compliance, lateStreams, today }) {
           )
         : null,
       soon.length > 0
-        ? el(
-            'div',
-            { class: 'attention-group' },
-            el('strong', {}, 'Coming up'),
+        ? group(
+            `Due within ${DUE_SOON_DAYS} days`,
             el(
               'ul',
               {},
-              ...soon.map((item) => el('li', {}, `${item.label} — ${ukDate(item.date)}`)),
+              ...soon.map((item) =>
+                el(
+                  'li',
+                  {},
+                  el('span', { class: 'badge badge-soon' }, 'Due soon'),
+                  ` ${item.label} — ${ukDate(item.date)}, in ${daysBetween(today, item.date)} days`,
+                ),
+              ),
+            ),
+          )
+        : null,
+      upcoming.length > 0
+        ? group(
+            'Coming up',
+            el('ul', {}, ...upcoming.map((item) => el('li', {}, `${item.label} — ${ukDate(item.date)}`))),
+          )
+        : null,
+      // A prompt rather than a warning, and last: nothing here has a deadline,
+      // it is simply the app admitting what it has not been told.
+      missing.length > 0
+        ? group(
+            'Still to add',
+            el(
+              'p',
+              { class: 'hint' },
+              `Nothing recorded for ${listing(missing.map((m) => m.label))}. `,
+              el('button', { class: 'link', onclick: openDetails }, 'Add it on the Overview panel'),
+              '.',
             ),
           )
         : null,
@@ -1126,7 +1256,7 @@ function renderMonthlyBreakdown(root, shares, categories, rerender) {
   // The year shortcuts are derived from this property's own transactions, so
   // the list never offers a year this property has nothing in.
   const dated = shares.map((s) => ({ date: s.transaction.date }));
-  const months = monthlyTotals(sharesInBreakdownRange(shares));
+  const months = monthlyTotals(sharesInRange(shares, breakdownRange));
 
   root.append(
     el(
@@ -1389,6 +1519,7 @@ function renderCompliance(root, property, statuses, today, rerender) {
           el('th', { class: 'num' }, 'Every'),
           el('th', {}, 'Last done'),
           el('th', {}, 'Next due'),
+          el('th', { title: 'Tick to say this certificate does not apply to this property' }, 'N/A'),
           el('th', {}, ''),
         ),
       ),
@@ -1398,7 +1529,7 @@ function renderCompliance(root, property, statuses, today, rerender) {
         ...statuses.map((status) =>
           el(
             'tr',
-            { class: status.overdue ? 'row-overdue' : '' },
+            { class: status.exempt ? 'row-exempt' : status.overdue ? 'row-overdue' : '' },
             el(
               'td',
               { class: 'details', title: status.type.description },
@@ -1415,32 +1546,40 @@ function renderCompliance(root, property, statuses, today, rerender) {
                 ? ukDate(status.lastCompletedDate)
                 : el('span', { class: 'unset' }, 'never recorded'),
             ),
+            el('td', {}, nextDueCell(status)),
             el(
               'td',
               {},
-              status.nextDue === null
-                ? el('span', { class: 'unset' }, '—')
-                : status.overdue
-                  ? el(
-                      'span',
-                      {},
-                      el('span', { class: 'badge badge-overdue' }, 'Overdue'),
-                      ` since ${ukDate(status.nextDue)}`,
-                    )
-                  : ukDate(status.nextDue),
+              el(
+                'label',
+                { class: 'inline', title: `${status.type.name} does not apply to ${property.name}` },
+                el('input', {
+                  type: 'checkbox',
+                  checked: status.exempt,
+                  'aria-label': `${status.type.name} does not apply to ${property.name}`,
+                  onchange: (event) => {
+                    void setComplianceExempt(property.id, status.type.id, event.target.checked).then(rerender);
+                  },
+                }),
+              ),
             ),
             el(
               'td',
               { class: 'actions' },
-              el(
-                'button',
-                {
-                  class: 'link',
-                  onclick: () => logCompletion(property, status.type, today, rerender),
-                },
-                'Log completion',
-              ),
-              status.lastCompletion
+              // Nothing to log against a certificate this property does not
+              // need; offering the button anyway would invite an entry that
+              // then has to be undone.
+              status.exempt
+                ? el('span', { class: 'unset' }, 'not required')
+                : el(
+                    'button',
+                    {
+                      class: 'link',
+                      onclick: () => logCompletion(property, status.type, today, rerender),
+                    },
+                    'Log completion',
+                  ),
+              status.lastCompletion && !status.exempt
                 ? el(
                     'button',
                     {
@@ -1462,6 +1601,29 @@ function renderCompliance(root, property, statuses, today, rerender) {
       ),
     ),
   );
+}
+
+/** The "Next due" cell: a date, a state, or nothing to say. */
+function nextDueCell(status) {
+  if (status.exempt) return el('span', { class: 'badge' }, 'Not applicable');
+  if (status.nextDue === null) return el('span', { class: 'unset' }, '—');
+  if (status.overdue) {
+    return el(
+      'span',
+      {},
+      el('span', { class: 'badge badge-overdue' }, 'Overdue'),
+      ` since ${ukDate(status.nextDue)}`,
+    );
+  }
+  if (status.dueSoon) {
+    return el(
+      'span',
+      {},
+      el('span', { class: 'badge badge-soon' }, 'Due soon'),
+      ` ${ukDate(status.nextDue)}`,
+    );
+  }
+  return ukDate(status.nextDue);
 }
 
 /** Logs an inspection: when it was done, plus an optional certificate number. */
@@ -1601,7 +1763,9 @@ function sectionForm(section, property, current, rerender) {
   for (const field of section.fields) {
     const value = current?.data?.[field.key] ?? '';
     let input;
-    if (field.type === 'textarea') {
+    if (field.type === 'boolean') {
+      input = el('input', { type: 'checkbox', checked: isTrue(value) });
+    } else if (field.type === 'textarea') {
       input = el('textarea', { rows: '2', class: 'wide' });
       input.value = value;
     } else if (field.type === 'select') {
@@ -1645,7 +1809,11 @@ function sectionForm(section, property, current, rerender) {
           return;
         }
         const data = {};
-        for (const [key, input] of inputs) data[key] = input.value.trim();
+        for (const [key, input] of inputs) {
+          // A ticked box is an answer: "owned outright, no other details" has
+          // to be savable, so it counts as a filled-in field.
+          data[key] = input.type === 'checkbox' ? (input.checked ? 'yes' : '') : input.value.trim();
+        }
         if (Object.values(data).every((v) => v === '')) {
           toast('Fill in at least one field.', 'error');
           return;
@@ -1666,12 +1834,22 @@ function sectionForm(section, property, current, rerender) {
       'div',
       { class: 'detail-fields' },
       ...section.fields.map((field) =>
-        el(
-          'label',
-          { class: field.type === 'textarea' ? 'grow' : '' },
-          field.label,
-          inputs.get(field.key),
-        ),
+        // A checkbox reads box-then-label; everything else reads label-then-box.
+        field.type === 'boolean'
+          ? el(
+              'label',
+              { class: 'inline grow' },
+              inputs.get(field.key),
+              ` ${field.label}`,
+              field.hint ? el('small', {}, field.hint) : null,
+            )
+          : el(
+              'label',
+              { class: field.type === 'textarea' ? 'grow' : '' },
+              field.label,
+              inputs.get(field.key),
+              field.hint ? el('small', {}, field.hint) : null,
+            ),
       ),
     ),
     el(
@@ -1698,6 +1876,7 @@ function inputType(type) {
 }
 
 function formatValue(field, value) {
+  if (field.type === 'boolean') return isTrue(value) ? 'Yes' : 'No';
   if (field.type === 'money') return money(number(value));
   if (field.type === 'percent') return `${value}%`;
   if (field.type === 'date') return ukDate(value);

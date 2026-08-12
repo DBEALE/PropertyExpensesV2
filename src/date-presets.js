@@ -25,6 +25,22 @@ export function taxYearLabel(startYear) {
   return `${startYear}/${String((startYear + 1) % 100).padStart(2, '0')}`;
 }
 
+/**
+ * The tax year in progress, as a range — the opening filter for every screen
+ * that shows money.
+ *
+ * Defaulting to "all dates" made every total a lifetime figure, which is
+ * almost never the question being asked: a landlord looking at Summary or at a
+ * property's costs wants this year unless they say otherwise. Widening to the
+ * whole history is one click; noticing that a number quietly covered eleven
+ * years is not.
+ *
+ * @param {string} [today] ISO date, so callers control "now" rather than the clock
+ */
+export function currentTaxYearRange(today) {
+  return taxYearRange(taxYearOf(today ?? new Date().toISOString().slice(0, 10)));
+}
+
 function calendarYearRange(year) {
   return { from: `${year}-01-01`, to: `${year}-12-31` };
 }

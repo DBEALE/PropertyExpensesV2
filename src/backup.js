@@ -13,13 +13,14 @@ const FORMAT = 'property-expenses-backup';
 export function buildBackup(state, exportedAt) {
   return {
     format: FORMAT,
-    version: 5,
+    version: 6,
     exportedAt,
     properties: state.properties,
     categories: state.categories,
     propertyDetails: state.propertyDetails ?? [],
     complianceTypes: state.complianceTypes ?? [],
     complianceCompletions: state.complianceCompletions ?? [],
+    complianceExemptions: state.complianceExemptions ?? [],
     settings: state.settings ?? [],
     rules: state.rules,
     transactions: state.transactions,
@@ -140,6 +141,21 @@ export function validateBackup(raw) {
     throw new BackupFormatError('Backup file contains malformed compliance completions.');
   }
 
+  // Which certificates a property is exempt from. Optional, like the two
+  // above: a backup written before the tick box existed simply has none, and
+  // restores as "everything applies", which is what it meant at the time.
+  const rawExemptions = Array.isArray(data.complianceExemptions) ? data.complianceExemptions : [];
+  const complianceExemptions = rawExemptions.filter(
+    (e) =>
+      e &&
+      typeof e.id === 'string' &&
+      knownProperty(e.propertyId) &&
+      knownComplianceType(e.complianceTypeId),
+  );
+  if (complianceExemptions.length !== rawExemptions.length) {
+    throw new BackupFormatError('Backup file contains malformed compliance exemptions.');
+  }
+
   // Settings are optional and self-describing; anything unrecognised is
   // dropped rather than rejected, since a missing parameter falls back to its
   // default rather than corrupting anything.
@@ -181,6 +197,7 @@ export function validateBackup(raw) {
     propertyDetails,
     complianceTypes,
     complianceCompletions,
+    complianceExemptions,
     settings,
     rules,
     transactions,

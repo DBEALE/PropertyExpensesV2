@@ -1,6 +1,6 @@
 import { hasSplit } from './allocation.js';
 import { DEFAULT_CATEGORIES, NON_PROPERTY_NAME, isNonProperty } from './categories.js';
-import { DEFAULT_COMPLIANCE_TYPES, completionsForType } from './compliance.js';
+import { DEFAULT_COMPLIANCE_TYPES, completionsForType, exemptionId } from './compliance.js';
 import { withDefaults } from './tax.js';
 import { slotClass } from './palette.js';
 import { supersede } from './property-details.js';
@@ -15,11 +15,19 @@ const state = {
   propertyDetails: [],
   complianceTypes: [],
   complianceCompletions: [],
+  complianceExemptions: [],
   settings: [],
   rules: [],
   transactions: [],
 };
 const listeners = new Set();
+
+/**
+ * A digest of everything worth backing up, recomputed once per load rather
+ * than per render — every write goes through load(), so this is exactly as
+ * fresh as the state it describes.
+ */
+let signature = '';
 
 export function getState() {
   return state;
@@ -34,17 +42,27 @@ function notify() {
 }
 
 export async function load() {
-  let [properties, categories, propertyDetails, complianceTypes, complianceCompletions, settings, rules, transactions] =
-    await Promise.all([
-      db.getAll('properties'),
-      db.getAll('categories'),
-      db.getAll('propertyDetails'),
-      db.getAll('complianceTypes'),
-      db.getAll('complianceCompletions'),
-      db.getAll('settings'),
-      db.getAll('rules'),
-      db.getAll('transactions'),
-    ]);
+  let [
+    properties,
+    categories,
+    propertyDetails,
+    complianceTypes,
+    complianceCompletions,
+    complianceExemptions,
+    settings,
+    rules,
+    transactions,
+  ] = await Promise.all([
+    db.getAll('properties'),
+    db.getAll('categories'),
+    db.getAll('propertyDetails'),
+    db.getAll('complianceTypes'),
+    db.getAll('complianceCompletions'),
+    db.getAll('complianceExemptions'),
+    db.getAll('settings'),
+    db.getAll('rules'),
+    db.getAll('transactions'),
+  ]);
   // First run, or an install predating editable categories: seed the five
   // defaults. Their ids match the names older records stored, so existing
   // transactions and rules keep resolving.
@@ -63,9 +81,11 @@ export async function load() {
   state.propertyDetails = propertyDetails;
   state.complianceTypes = complianceTypes;
   state.complianceCompletions = complianceCompletions;
+  state.complianceExemptions = complianceExemptions;
   state.settings = settings;
   state.rules = rules;
   state.transactions = transactions.sort((a, b) => b.date.localeCompare(a.date));
+  signature = signatureOf(state);
   notify();
 }
 
@@ -265,6 +285,19 @@ export async function deleteComplianceCompletion(id) {
 }
 
 /**
+ * Marks a certificate as applying to a property, or not.
+ *
+ * Keyed by property and type rather than given a random id, so ticking the box
+ * twice cannot leave two rows saying the same thing.
+ */
+export async function setComplianceExempt(propertyId, complianceTypeId, exempt) {
+  const id = exemptionId(propertyId, complianceTypeId);
+  if (exempt) await db.put('complianceExemptions', { id, propertyId, complianceTypeId });
+  else await db.remove('complianceExemptions', id);
+  await load();
+}
+
+/**
  * The tax parameters behind the Summary estimate, with defaults filled in for
  * anything not yet set — including on a first run, when nothing is stored.
  */
@@ -324,10 +357,70 @@ export async function deleteTransaction(id) {
 export async function restoreBackup(raw) {
   await db.replaceAll(validateBackup(raw));
   await load();
+  // What was just restored *is* on disk somewhere — the file it came from — so
+  // the freshly loaded state is not unbacked-up work.
+  await markBackedUp();
 }
-
 
 export async function clearEverything() {
   await db.clearAll();
+  await load();
+}
+
+/**
+ * A digest of everything a backup would contain.
+ *
+ * FNV-1a over a canonical serialisation: fast enough to run on every load with
+ * thousands of transactions, and it changes when any field of any record does
+ * — which counting rows would not. Settings are excluded because the tax
+ * parameters and the backup bookmark itself both live there, and recording a
+ * backup would otherwise immediately invalidate it.
+ */
+function signatureOf(current) {
+  let hash = 0x811c9dc5;
+  const feed = (text) => {
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+  };
+  for (const key of BACKED_UP_STORES) {
+    feed(key);
+    for (const record of current[key]) feed(JSON.stringify(record));
+  }
+  return hash.toString(16);
+}
+
+const BACKED_UP_STORES = [
+  'properties',
+  'categories',
+  'propertyDetails',
+  'complianceTypes',
+  'complianceCompletions',
+  'complianceExemptions',
+  'rules',
+  'transactions',
+];
+
+/** When the last backup was taken, and of what. */
+export function backupRecord() {
+  return state.settings.find((s) => s.id === 'backup') ?? null;
+}
+
+/**
+ * True when something has changed since the last backup was downloaded.
+ *
+ * A store that has never been backed up counts as pending only once there is
+ * something in it — a brand new install with no data is not "unsaved work".
+ */
+export function backupPending() {
+  const record = backupRecord();
+  if (!record) return BACKED_UP_STORES.some((key) => state[key].length > 0);
+  return record.signature !== signature;
+}
+
+/** Records that the current state has been written to a file. */
+export async function markBackedUp() {
+  await db.put('settings', { id: 'backup', at: new Date().toISOString(), signature });
   await load();
 }

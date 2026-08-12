@@ -41,6 +41,10 @@ function summarise(overrides = {}) {
   return panelSummaries({
     shares: [],
     categories: CATEGORIES,
+    // Blank bounds mean "everything", so a test says what it is filtering by
+    // rather than inheriting whatever the screen happens to default to.
+    range: { from: '', to: '' },
+    listRange: { from: '', to: '' },
     streams: [],
     lateStreams: [],
     statuses: [],
@@ -180,6 +184,26 @@ describe('the Transactions summary', () => {
 
   it('reads as singular for one', () => {
     assert.match(summarise({ transactions: [{ date: '2026-01-05' }] }).transactions, /1 transaction ·/);
+  });
+
+  it('counts what the panel would list, not what the property has', () => {
+    // The panel opens on a tax year, so a summary claiming the lifetime total
+    // would send you looking for rows that are filtered out.
+    const { transactions } = summarise({
+      transactions: [{ date: '2025-01-05' }, { date: '2026-07-30' }, { date: '2026-08-01' }],
+      listRange: { from: '2026-04-06', to: '2027-04-05' },
+    });
+    assert.match(transactions, /2 transactions/);
+    assert.match(transactions, /of 3 in total/, 'the ones left out are still acknowledged');
+  });
+
+  it('says so when the range excludes everything, rather than reading as empty', () => {
+    const { transactions } = summarise({
+      transactions: [{ date: '2020-01-05' }],
+      listRange: { from: '2026-04-06', to: '2027-04-05' },
+    });
+    assert.match(transactions, /None in the selected range/);
+    assert.match(transactions, /1 in total/);
   });
 });
 

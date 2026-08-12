@@ -1,9 +1,18 @@
 import { BackupFormatError, buildBackup } from '../backup.js';
-import { download, el, toast } from '../dom.js';
-import { clearEverything, getState, restoreBackup } from '../store.js';
+import { download, el, toast, ukDate } from '../dom.js';
+import {
+  backupPending,
+  backupRecord,
+  clearEverything,
+  getState,
+  markBackedUp,
+  restoreBackup,
+} from '../store.js';
 
 export function renderBackup(root, rerender) {
   const { properties, rules, transactions } = getState();
+  const last = backupRecord();
+  const pending = backupPending();
 
   const fileInput = el('input', {
     type: 'file',
@@ -21,6 +30,27 @@ export function renderBackup(root, rerender) {
       { class: 'hint' },
       'Everything lives in this browser’s IndexedDB. Clearing site data wipes it, so download a backup ' +
         'regularly and keep it somewhere safe.',
+    ),
+    // Says which of the two states you are in and what to do about it, rather
+    // than leaving the dot on the tab as the only signal.
+    el(
+      'div',
+      { class: `notice${pending ? ' attention attention-overdue' : ''}` },
+      pending
+        ? el(
+            'span',
+            {},
+            el('span', { class: 'badge badge-overdue' }, 'Backup pending'),
+            last
+              ? ` Data has changed since your last backup on ${ukDate(last.at.slice(0, 10))}.`
+              : ' Nothing has been backed up from this browser yet.',
+          )
+        : el(
+            'span',
+            {},
+            el('span', { class: 'badge badge-ok' }, 'Up to date'),
+            last ? ` Nothing has changed since your backup on ${ukDate(last.at.slice(0, 10))}.` : ' There is nothing to back up yet.',
+          ),
     ),
     el(
       'div',
@@ -43,7 +73,13 @@ export function renderBackup(root, rerender) {
               JSON.stringify(buildBackup(getState(), now), null, 2),
               'application/json',
             );
-            toast('Backup downloaded.');
+            // Recorded against a digest of what was in the file, so editing
+            // one transaction afterwards brings the pending mark straight
+            // back — the mark tracks the data, not the calendar.
+            void markBackedUp().then(() => {
+              toast('Backup downloaded.');
+              rerender();
+            });
           },
         },
         'Download backup (JSON)',

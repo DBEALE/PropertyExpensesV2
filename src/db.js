@@ -3,7 +3,8 @@ const DB_NAME = 'property-expenses';
 // v3 added propertyDetails: dated records of address, mortgage, tenancy, etc.
 // v4 added complianceTypes and complianceCompletions: the inspection schedule.
 // v5 added settings: the tax parameters behind the Summary estimate.
-const DB_VERSION = 5;
+// v6 added complianceExemptions: which certificates don't apply to a property.
+const DB_VERSION = 6;
 
 export const STORES = [
   'properties',
@@ -11,6 +12,7 @@ export const STORES = [
   'propertyDetails',
   'complianceTypes',
   'complianceCompletions',
+  'complianceExemptions',
   'settings',
   'rules',
   'transactions',
@@ -84,7 +86,9 @@ export function replaceAll(data) {
     for (const name of STORES) {
       const os = tx.objectStore(name);
       os.clear();
-      for (const value of data[name]) os.put(value);
+      // A backup written before a store existed simply has nothing for it,
+      // which is a restore of an empty store rather than an error.
+      for (const value of data[name] ?? []) os.put(value);
     }
   });
 }

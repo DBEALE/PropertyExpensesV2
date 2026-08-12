@@ -1,7 +1,8 @@
 import { isAssigned } from './allocation.js';
+import { attentionTotal } from './attention.js';
 import { clear, el, toast } from './dom.js';
 import { applyResponsive, watchBreakpoint } from './responsive.js';
-import { getState, load, subscribe } from './store.js';
+import { backupPending, getState, load, subscribe } from './store.js';
 import { renderBackup } from './views/backup.js';
 import { renderImport } from './views/import.js';
 import { renderConfig } from './views/config.js';
@@ -9,6 +10,7 @@ import { renderProperty } from './views/property.js';
 import { renderRules } from './views/rules.js';
 import { renderSummary } from './views/summary.js';
 import { renderTransactions } from './views/transactions.js';
+import { renderWhatsNew } from './views/whats-new.js';
 
 const ROUTES = [
   { id: 'import', label: 'Import', render: renderImport },
@@ -18,6 +20,9 @@ const ROUTES = [
   { id: 'properties', label: 'Properties', render: renderProperty },
   { id: 'summary', label: 'Summary', render: renderSummary },
   { id: 'backup', label: 'Backup', render: renderBackup },
+  // Pushed to the far end of the row: it is about the app rather than about
+  // your data, so it does not belong in the sequence of places you work.
+  { id: 'whats-new', label: 'What’s new', render: renderWhatsNew, trailing: true },
 ];
 
 const view = document.getElementById('view');
@@ -38,20 +43,58 @@ function navigate(routeId) {
   window.location.hash = `#/${routeId}`;
 }
 
+/**
+ * The badge on a tab: how much of that screen's work is outstanding.
+ *
+ * Counted here rather than by each view, so the number on the tab and the list
+ * behind it are the same number. Zero means no badge at all — a badge showing
+ * "0" is a badge you stop reading.
+ */
+function tabBadge(routeId) {
+  const state = getState();
+  if (routeId === 'transactions') {
+    const needsReview = state.transactions.filter((t) => !isAssigned(t)).length;
+    return needsReview > 0
+      ? { text: String(needsReview), title: `${needsReview} transaction(s) not categorised`, class: 'pill' }
+      : null;
+  }
+  if (routeId === 'properties') {
+    const attention = attentionTotal(state, new Date().toISOString().slice(0, 10));
+    return attention > 0
+      ? { text: String(attention), title: `${attention} item(s) overdue or due within 30 days`, class: 'pill' }
+      : null;
+  }
+  if (routeId === 'backup') {
+    // A dot, not a count: "something has changed" is one fact however many
+    // things changed, and a number here would only invite you to work out
+    // which ones.
+    return backupPending()
+      ? { text: '', title: 'Changes since your last backup', class: 'pill pill-dot', label: 'backup pending' }
+      : null;
+  }
+  return null;
+}
+
 function renderNav(active) {
   clear(nav);
-  const needsReview = getState().transactions.filter((t) => !isAssigned(t)).length;
   for (const route of ROUTES) {
+    const badge = tabBadge(route.id);
     nav.append(
       el(
         'a',
         {
           href: `#/${route.id}`,
-          class: route.id === active.id ? 'tab active' : 'tab',
+          class: `tab${route.id === active.id ? ' active' : ''}${route.trailing ? ' tab-trailing' : ''}`,
           'aria-current': route.id === active.id ? 'page' : undefined,
         },
         route.label,
-        route.id === 'transactions' && needsReview > 0 ? el('span', { class: 'pill' }, String(needsReview)) : null,
+        badge
+          ? el(
+              'span',
+              { class: badge.class, title: badge.title, 'aria-label': badge.label ?? badge.title },
+              badge.text,
+            )
+          : null,
       ),
     );
   }
@@ -88,7 +131,7 @@ if (typeof ResizeObserver === 'function') {
 window.addEventListener('hashchange', render);
 // Rotating the phone can cross the breakpoint, so re-lay-out when it does.
 watchBreakpoint(render);
-// Keep the "needs review" badge honest after writes from any view.
+// Keep the tab badges honest after writes from any view.
 subscribe(() => renderNav(currentRoute()));
 
 load()

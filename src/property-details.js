@@ -54,8 +54,17 @@ export const SECTIONS = [
   {
     key: 'mortgage',
     label: 'Mortgage',
-    summary: (d) => [d.lender, d.rate !== undefined && d.rate !== '' ? `${d.rate}%` : null].filter(Boolean).join(' · '),
+    summary: (d) =>
+      isTrue(d.ownedOutright)
+        ? 'Owned outright'
+        : [d.lender, d.rate !== undefined && d.rate !== '' ? `${d.rate}%` : null].filter(Boolean).join(' · '),
     fields: [
+      {
+        key: 'ownedOutright',
+        label: 'Owned outright — no mortgage',
+        type: 'boolean',
+        hint: 'Stops this property asking for mortgage details',
+      },
       { key: 'lender', label: 'Lender', type: 'text' },
       { key: 'accountNumber', label: 'Account number', type: 'text' },
       { key: 'amount', label: 'Outstanding balance', type: 'money' },
@@ -108,6 +117,41 @@ export const SECTIONS = [
 
 export function sectionByKey(key) {
   return SECTIONS.find((s) => s.key === key) ?? null;
+}
+
+/**
+ * A stored boolean. Checkbox fields save 'yes' or '', but a record written by
+ * an older version — or restored from a backup that predates the field — may
+ * hold anything at all, so this reads leniently rather than trusting one form.
+ */
+export function isTrue(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  return text === 'yes' || text === 'true' || text === 'on' || text === '1';
+}
+
+/** True when the mortgage record says the property is owned outright. */
+export function isOwnedOutright(records, propertyId) {
+  return isTrue(currentRecord(records, propertyId, 'mortgage')?.data?.ownedOutright);
+}
+
+/**
+ * The sections with nothing recorded against them yet, as a prompt rather than
+ * a fault.
+ *
+ * Ticking "owned outright" writes a mortgage record like any other answer, so
+ * a property with no borrowing stops being prompted for one — the point being
+ * that a reminder you cannot ever clear is a reminder you learn to scroll
+ * past.
+ *
+ * @param {object[]} records all detail records
+ * @param {string} propertyId
+ * @returns {{key: string, label: string}[]} in SECTIONS order
+ */
+export function missingSections(records, propertyId) {
+  return SECTIONS.filter((section) => !currentRecord(records, propertyId, section.key)).map((section) => ({
+    key: section.key,
+    label: section.label,
+  }));
 }
 
 /**
@@ -175,17 +219,21 @@ export function isExpired(record) {
  * the UI can say "add a valuation" rather than showing a made-up 0%.
  */
 export function loanToValue(mortgage, valuation) {
-  const debt = toNumber(mortgage?.data?.amount);
   const value = toNumber(valuation?.data?.value);
-  if (debt === null || value === null || value <= 0) return null;
+  if (value === null || value <= 0) return null;
+  // Owned outright is a known borrowing of nothing, not a missing figure: 0%
+  // is the true answer, where an em dash would read as "not worked out yet".
+  if (isTrue(mortgage?.data?.ownedOutright)) return 0;
+  const debt = toNumber(mortgage?.data?.amount);
+  if (debt === null) return null;
   return Math.round((debt / value) * 1000) / 10;
 }
 
 /** Equity: what the property is worth less what is owed on it. */
 export function equity(mortgage, valuation) {
-  const debt = toNumber(mortgage?.data?.amount);
   const value = toNumber(valuation?.data?.value);
   if (value === null) return null;
+  const debt = isTrue(mortgage?.data?.ownedOutright) ? 0 : toNumber(mortgage?.data?.amount);
   return Math.round((value - (debt ?? 0)) * 100) / 100;
 }
 

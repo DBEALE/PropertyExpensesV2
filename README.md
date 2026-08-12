@@ -31,9 +31,12 @@ third-party service.
 - **Non-property classification** — mark personal spending and transfers as **Not a property**, so
   they're classified rather than sitting in the review queue, and stay out of the property totals.
 - **Backup** — download everything as one JSON file and restore from it. This is the safety net
-  against browser storage being cleared.
+  against browser storage being cleared. The tab carries a dot whenever anything has changed since
+  your last download.
 - **Property status** — each property's page flags what needs doing: recurring payments that have
-  stopped arriving, and compliance certificates (gas safety, EICR, PAT, legionella) coming due.
+  stopped arriving, compliance certificates (gas safety, EICR, PAT, legionella) overdue or due
+  within 30 days, and records you have not filled in yet. The count sits on the Properties tab.
+- **What's new** — a changelog of the app itself, at the far right of the tab row.
 - **Colour identity** — every property and category carries a colour, used consistently on every
   screen.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
@@ -122,11 +125,40 @@ row of headline panels above every property page.
 
 The top of the property page answers that in one place.
 
-**Needs attention / Coming up** — a single banner merging three sources, sorted by date: dated
-records falling due (fixed-rate end, insurance renewal, tenancy end), compliance items due within 90
-days, and recurring payments that haven't arrived. Overdue items are listed first, styled distinctly
-and labelled with how late they are ("Gas Safety Certificate — due 24/07/2026, 14 days ago"), because
-"this lapsed three weeks ago" is a different kind of fact from "insurance renews in September".
+One banner, in **four grades**, because they are four different kinds of fact and mixing them is how
+a warning gets ignored:
+
+| Grade | What it means | How it reads |
+| --- | --- | --- |
+| **Needs attention** | a date that has already passed | red `Overdue` badge — "Gas Safety — due 14/06/2026, 59 days ago" |
+| **Due within 30 days** | a certificate about to lapse | yellow `Due soon` badge — "Gas Safety — 01/09/2026, in 20 days" |
+| **Coming up** | anything else falling due inside 90 days | plain text — "Tenancy ends — 30/09/2026" |
+| **Still to add** | a record section with nothing in it | a prompt with a link to the Overview panel |
+
+The 30-day grade is the one worth explaining: 28 days to book a gas engineer is a different kind of
+fact from 80 days, and the old banner put both in the same list. The boundary is one constant
+(`DUE_SOON_DAYS`) shared by the banner, the compliance table, the portfolio overview and the tab
+badge, so "due soon" means one thing everywhere.
+
+**Still to add** is a prompt, not a deadline, and is deliberately **not counted** in the tab badge.
+A property whose insurance you have chosen not to record would otherwise carry a number that can
+never reach zero, which is how a badge teaches people to stop reading it.
+
+Everything here is counted once, in `src/attention.js`, and rendered from that. Four places used to
+work it out separately — the tab badge, the property banner, the overview's attention list and its
+Attention column — and they could disagree.
+
+#### Things that don't apply
+
+Two escape hatches, both for the same reason: a reminder you cannot clear is a reminder you learn to
+scroll past.
+
+- **A certificate that doesn't apply** — tick the **N/A** box on the compliance table. Gas safety on
+  an all-electric flat stops being counted, chased or listed, and the row stays visible (dimmed,
+  reading "Not applicable") so the decision can be found and reversed. Per property, not global.
+- **A property with no mortgage** — tick **Owned outright** in the Mortgage section. It stops
+  prompting for mortgage details, and LTV reads `0%` rather than an em dash, because a known
+  borrowing of nothing is a figure and not a missing one.
 
 ### One section at a time
 
@@ -143,16 +175,21 @@ destinations, and most visits should end at the summary without opening anything
 | --- | --- |
 | Monthly breakdown | `18 of 19 months' rent received · £7,790 Interest · £1,100 Repairs · net £10,432` |
 | Recurring payments | `1 repeating payment · 1 overdue` |
-| Compliance | `3 certificates tracked · 1 overdue · 1 never logged` |
-| Transactions | `68 transactions · latest 30/07/2026` |
+| Compliance | `3 certificates tracked · 1 due within 30 days · 2 never logged` |
+| Transactions | `15 transactions · of 68 in total · latest 30/07/2026` |
 | Overview | `Insurance, Mortgage, Valuation and Tenancy recorded · Address not recorded` |
 
 Each leads with the figure that would otherwise have to be counted by eye — how many months' rent
 actually arrived, which certificates have lapsed, which records are missing — rather than with how
 many rows the table has. Costs are shown unsigned, because the category name already says the money
-went out. The **Overview** panel holds the five dated record sections, address through tenancy,
-together on one page: an overview *of the property*, as distinct from the portfolio overview at the
-top of the switcher.
+went out. Every summary describes what its own panel would show **including its filters**, so
+opening one never contradicts the line that made you open it — which is why the Transactions
+summary says "15 of 68" rather than quietly reporting the lifetime count.
+
+The **Overview** panel holds the five dated record sections, address through tenancy, laid out as
+**tiles** rather than a column five screens tall: an overview *of the property*, as distinct from
+the portfolio overview at the top of the switcher. Whichever section you are editing takes the full
+width, because a form squeezed into a third of a row is worse than a row that momentarily reflows.
 
 They are real tabs: arrow keys move along the strip, only the open one is in the tab order, and
 focus follows the selection.
@@ -165,8 +202,12 @@ rather than trailing an empty column down the page, and columns sort like everyw
 clicking *Repairs* ranks the months by what they cost.
 
 It carries the same date-range control as the Transactions tab — the shortcut dropdown plus the two
-dates — so a tax year is one click away. The year shortcuts here list only the years **this
-property** has transactions in, rather than every year in the file.
+dates — as does the property's own **Transactions** panel. The year shortcuts on both list only the
+years **this property** has transactions in, rather than every year in the file.
+
+Both open on the **tax year in progress**, as does the Summary tab. Defaulting to all dates made
+every figure a lifetime total, which is almost never the question: widening the range is one click,
+whereas noticing that a number quietly covered eleven years is not.
 
 **Cashflow** — money in and out per month as stacked columns by category, on a single axis, sitting
 inside the monthly breakdown between the date control and the table. Hover or keyboard-focus a block
@@ -592,6 +633,31 @@ synchronised anywhere.
 - The same site served from a different origin (e.g. `localhost` vs. GitHub Pages) has separate
   storage. Move data between them with a backup file.
 
+### Knowing when a backup is due
+
+Downloading a backup records a **digest of what was in the file**. A dot appears next to the Backup
+tab whenever the current data no longer matches that digest, and the Backup page says which state
+you are in and when the last download was.
+
+It tracks the data rather than the calendar, which is the useful distinction: edit one transaction
+and the mark comes straight back; undo that edit and it clears again, because the file on disk is
+once more an accurate copy. Restoring from a file also counts as backed up — what you have just
+loaded demonstrably exists somewhere else.
+
+The digest is FNV-1a over every backed-up store, computed once per load rather than per render, and
+deliberately excludes `settings` — the backup bookmark lives there, so including it would make
+recording a backup immediately invalidate it.
+
+## What's new
+
+`src/whats-new.js` is a list of releases — date, title, and the points worth telling a user about —
+rendered by the **What's new** tab at the far right of the row. It sits apart from the others
+because it is about the app rather than about your data.
+
+**Every user-visible feature gets an entry.** Write the points for the person using the app: what it
+now does and why that is better, not which function moved. `tests/whats-new.test.js` checks the
+dating, ordering and shape; it cannot tell whether an entry is missing.
+
 ## Project layout
 
 ```
@@ -605,8 +671,10 @@ src/
   categories.js       default categories and the non-property sentinel
   palette.js          the eight identity colour slots
   accounts.js         monthly totals and recurring-payment detection
-  property-details.js dated property records, LTV, upcoming dates
-  compliance.js       inspection schedule: next due, overdue, upcoming
+  property-details.js dated property records, LTV, upcoming dates, missing sections
+  compliance.js       inspection schedule: next due, overdue, due soon, not applicable
+  attention.js        one tally of what a property wants, shared by badge/banner/table
+  whats-new.js        the changelog the app shows about itself
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
   responsive.js       card-mode cell labels and the mobile sort control
@@ -618,7 +686,7 @@ src/
   views/property.js   one property: figures, schedule, records, transactions
   charts.js           small SVG chart builders (columns, legend, table view)
   importer.js         statement text -> transactions, duplicates, re-categorising
-  store.js            in-memory state over IndexedDB
+  store.js            in-memory state over IndexedDB, plus the backup-pending digest
   db.js               IndexedDB wrapper
   backup.js           backup build and validation
   dates.js            tax year and date range helpers

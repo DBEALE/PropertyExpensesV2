@@ -1,7 +1,7 @@
 import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
 import { filterByDate, taxYearRange } from '../dates.js';
-import { taxYearLabel, taxYearOf } from '../date-presets.js';
+import { currentTaxYearRange, taxYearLabel, taxYearOf } from '../date-presets.js';
 import { download, el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { getState, saveTaxSettings, taxSettings } from '../store.js';
@@ -9,8 +9,13 @@ import { estimateTax, summariseForTax } from '../tax.js';
 import { dateRangeControls } from './date-filter.js';
 import { slotClass } from '../palette.js';
 
-/** Range state lives outside render so it survives re-renders. */
-const range = { from: '', to: '' };
+/**
+ * Range state lives outside render so it survives re-renders, and opens on the
+ * tax year in progress — the period a Self Assessment return actually asks
+ * about. It used to open on all dates, which made every figure on this screen
+ * a lifetime total by default.
+ */
+const range = { ...currentTaxYearRange() };
 const sort = { key: 'name', dir: 'asc' };
 
 /**
