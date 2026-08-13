@@ -282,6 +282,25 @@ label.inline small {
   margin: 0 0 12px;
 }
 
+/*
+ * A filter bar that stays put while its list scrolls under it.
+ *
+ * Sits directly beneath the app header, and the table headings below it are
+ * pushed down by --filter-h, measured in main.js — the bar wraps onto two rows
+ * on a narrow window, so its height cannot be a constant. The negative inline
+ * margins let its background span the view's padding, or rows would show
+ * through at the edges as they pass behind it.
+ */
+.filter-bar.sticky {
+  position: sticky;
+  top: var(--header-h, 0px);
+  z-index: 5;
+  margin: 0 -20px 12px;
+  padding: 8px 20px;
+  background: var(--bg);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
 .filter-bar select,
 .filter-bar input,
 .filter-bar button {
@@ -347,12 +366,17 @@ table.data td {
   /* Tight enough that eight columns of transaction fit a normal window. */
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
-  vertical-align: middle;
+  /* Top, not middle: any cell can grow a second line — a note, the shares of a
+     split, an overdue caption — and centring the rest against it leaves the
+     row reading as a staircase. Aligned to the top, every first line of every
+     column sits on one baseline whatever else the row is carrying. */
+  vertical-align: top;
 }
 
 table.data thead th {
   position: sticky;
-  top: var(--header-h, 0px);
+  /* Below the app header, and below a sticky filter bar when there is one. */
+  top: calc(var(--header-h, 0px) + var(--filter-h, 0px));
   z-index: 2;
   background: var(--bg);
   font-size: 12px;
@@ -984,10 +1008,6 @@ table.data.tax-table {
   max-width: 760px;
 }
 
-table.data.tax-table td {
-  vertical-align: top;
-}
-
 table.data.tax-table td:first-child {
   color: var(--muted);
 }
@@ -1581,44 +1601,31 @@ tr.row-non-property td:first-child {
   overflow-wrap: anywhere;
 }
 
+/* The editor, which exists only while a note is being written. */
+.note-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .note-input {
-  display: block;
-  width: 100%;
-  margin-top: 3px;
-  padding: 2px 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 3px 6px;
   font-size: 12px;
-  font-style: italic;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--accent);
   border-radius: 4px;
 }
 
-.note-input.empty {
-  opacity: 0;
-}
-
-.note-input:hover,
-.note-input:focus,
-tr:hover .note-input {
-  opacity: 1;
-  border-color: var(--line);
-  background: var(--panel);
-}
-
 .note-input:focus {
-  font-style: normal;
-  color: var(--ink);
-  border-color: var(--accent);
   outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .share-amounts {
   margin-top: 2px;
-}
-
-tr.row-split td {
-  vertical-align: top;
 }
 
 .split-cell .share {

@@ -182,11 +182,8 @@ export function renderConfig(root, rerender) {
                   },
                   'Rename',
                 ),
-                el(
-                  'a',
-                  { class: 'link', href: `#/properties/${encodeURIComponent(property.id)}` },
-                  'Details',
-                ),
+                // No "Details" link here: the property name in the first
+                // column is already one, to the same page.
                 el(
                   'button',
                   {

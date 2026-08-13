@@ -49,13 +49,15 @@ export function noteOf(transaction) {
  * @param {boolean} [options.readOnly] show values instead of dropdowns
  * @param {(transaction: object, change: object) => void} [options.onAssign]
  * @param {(transaction: object, note: string) => void} [options.onNote]
+ * @param {string|null} [options.editingNoteId] the row whose note field is open
+ * @param {(transaction: object|null) => void} [options.onEditNote] open or close it
  * @param {(transaction: object) => void} [options.onCreateRule]
  * @param {(transaction: object) => void} [options.onDelete]
  * @param {string} [options.shareOf] property id: show that property's share of a
  *   split transaction as the amount, rather than the whole transaction
  */
 export function transactionTable(transactions, options) {
-  const { sort, onSort, readOnly = false, shareOf = null } = options;
+  const { sort, onSort, readOnly = false, shareOf = null, editingNoteId = null } = options;
   const { categories } = getState();
   const properties = selectableProperties(getState().properties);
   // When only one property's share is shown, Amount has to sort on that share
@@ -170,30 +172,66 @@ export function transactionTable(transactions, options) {
    *
    * The note lives here rather than in a column of its own because it is a
    * gloss on what the row already says — "which tenant this part-payment was
-   * from" belongs next to the payee, not eight columns away. It shows on every
-   * screen that shows the transaction; only the editable table offers the
-   * field, since the property page is deliberately read-only.
+   * from" belongs next to the payee, not eight columns away.
+   *
+   * A row with no note takes up no space for one. The field only exists while
+   * you are editing, opened from the Add note link in the actions column: an
+   * always-present input, even an invisible one, gave every row in a four
+   * hundred row statement a second line of height for something most of them
+   * will never have.
    */
   function detailsCell(transaction) {
     const note = noteOf(transaction);
+    const editing = !readOnly && transaction.id === editingNoteId;
+
+    if (editing) {
+      const input = el('input', {
+        class: 'note-input',
+        type: 'text',
+        value: note,
+        placeholder: 'Why this cost what it did, who paid it…',
+        'aria-label': `Note for ${transaction.details}`,
+        // Enter saves, Escape abandons — the two keys anyone will try in a
+        // single-line field opened by a link.
+        onkeydown: (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            options.onNote?.(transaction, event.target.value.trim());
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            options.onEditNote?.(null);
+          }
+        },
+      });
+      // Focus it once it is on the page, so opening the field means typing in it.
+      queueMicrotask(() => {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+
+      return el(
+        'td',
+        { class: 'details', title: transaction.sourceFilename },
+        transaction.details,
+        el(
+          'div',
+          { class: 'note-edit' },
+          input,
+          el(
+            'button',
+            { class: 'link', onclick: () => options.onNote?.(transaction, input.value.trim()) },
+            'Save',
+          ),
+          el('button', { class: 'link', onclick: () => options.onEditNote?.(null) }, 'Cancel'),
+        ),
+      );
+    }
+
     return el(
       'td',
       { class: 'details', title: transaction.sourceFilename },
       transaction.details,
-      readOnly
-        ? note
-          ? el('div', { class: 'note' }, note)
-          : null
-        : el('input', {
-            class: `note-input${note ? '' : ' empty'}`,
-            type: 'text',
-            value: note,
-            placeholder: 'Add a note',
-            'aria-label': `Note for ${transaction.details}`,
-            // On change, not on input: a re-render per keystroke would take the
-            // focus out of the box being typed into.
-            onchange: (event) => options.onNote?.(transaction, event.target.value.trim()),
-          }),
+      note ? el('div', { class: 'note' }, note) : null,
     );
   }
 
@@ -295,9 +333,21 @@ export function transactionTable(transactions, options) {
   }
 
   function actionsCell(transaction) {
+    const note = noteOf(transaction);
     return el(
       'td',
       { class: 'actions' },
+      // The note is opened from here rather than living permanently in the
+      // Details cell, so a row without one costs no height.
+      el(
+        'button',
+        {
+          class: 'link',
+          title: note ? `Note: ${note}` : 'Add a note to this transaction',
+          onclick: () => options.onEditNote?.(transaction),
+        },
+        note ? 'Edit note' : 'Add note',
+      ),
       el(
         'button',
         {

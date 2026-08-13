@@ -112,18 +112,28 @@ function render() {
 }
 
 /**
- * Table headings stick directly under the page heading, so they need its
- * height — which changes when the tab row wraps on a narrow window.
+ * Table headings stick directly under the page heading — and under a sticky
+ * filter bar where a screen has one — so they need both heights. Neither is a
+ * constant: the tab row and the filter bar each wrap on a narrow window.
  */
 function measureHeader() {
   const header = document.querySelector('.app-header');
-  if (!header) return;
-  document.documentElement.style.setProperty('--header-h', `${Math.round(header.offsetHeight)}px`);
+  if (header) {
+    document.documentElement.style.setProperty('--header-h', `${Math.round(header.offsetHeight)}px`);
+  }
+  const filters = document.querySelector('.filter-bar.sticky');
+  document.documentElement.style.setProperty(
+    '--filter-h',
+    filters ? `${Math.round(filters.offsetHeight)}px` : '0px',
+  );
 }
 
 if (typeof ResizeObserver === 'function') {
   const header = document.querySelector('.app-header');
   if (header) new ResizeObserver(measureHeader).observe(header);
+  // The view too: the filter bar inside it wraps at widths that leave the tab
+  // row alone, and the header observer would never fire for that.
+  if (view) new ResizeObserver(measureHeader).observe(view);
 } else {
   window.addEventListener('resize', measureHeader);
 }

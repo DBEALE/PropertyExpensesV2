@@ -510,8 +510,9 @@ also catches non-property rows, which are classified but carry no category.
 ### Notes
 
 Every transaction can carry a **note of your own** — why a repair cost what it did, which tenant a
-part-payment came from, that you are still waiting on the invoice. Type it straight into the row on
-the Transactions tab.
+part-payment came from, that you are still waiting on the invoice. **Add note** in the last column
+of the Transactions tab opens a field under the description; Enter saves it, Escape abandons it, and
+the same link closes it again.
 
 It sits under the bank's description rather than in a column of its own, because it is a gloss on
 what the row already says: "the second half of April's rent" belongs next to the payee, not eight
@@ -519,8 +520,10 @@ columns away. It then appears **everywhere that transaction appears** — the pr
 transaction list included — and in the CSV export, on the first line of a split, alongside `Balance`
 and for the same reason: the note belongs to the transaction, not to a share of it.
 
-An unfilled note field is invisible until you hover the row or tab into it. Hundreds of empty boxes
-down a statement would be worse than not having the feature.
+The field exists only while you are writing in it. A permanent input on every row — even an
+invisible one — gave a four hundred row statement a second line of height apiece for something most
+rows will never have. One row is editable at a time: two half-typed notes on screen are two chances
+to lose one.
 
 Saving a note is **not** an assignment. It goes through its own path, so writing "waiting on the
 invoice" against a row leaves the split intact and does not detach the rule that categorised it —
@@ -552,6 +555,16 @@ The page heading and tabs stay pinned to the top as you scroll, and table headin
 beneath them, so you never lose track of which column is which. Summary totals stay pinned to the
 bottom of their table. (On narrow screens the table scrolls sideways in its own box, which would
 anchor a sticky heading to the box rather than the page, so headings sit still there instead.)
+
+On the **Transactions** tab the filter bar is pinned too, between the tabs and the column headings.
+Working through a long statement means narrowing repeatedly, and scrolling back to the top to change
+one dropdown loses your place in the rows you were reading. The headings below it are pushed down by
+`--filter-h`, measured in `main.js` alongside the header height — neither is a constant, since the
+tab row and the filter bar each wrap on a narrow window.
+
+Cells align to the **top** of their row rather than the middle. Any cell can grow a second line — a
+note, the shares of a split, an overdue caption — and centring the rest against it leaves the row
+reading as a staircase.
 
 **Click any column heading to sort by it; click it again to reverse.** The active column is marked
 with an arrow and announced to screen readers. Blank cells always sort to the bottom whichever way

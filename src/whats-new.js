@@ -20,6 +20,23 @@
 export const RELEASES = [
   {
     date: '2026-08-13',
+    title: 'A tighter transactions table',
+    points: [
+      'Notes are written from an **Add note** link in the last column, which opens a field under the ' +
+        'description. A row without a note no longer reserves height for one, so a four hundred row ' +
+        'statement is a good deal shorter. Enter saves, Escape abandons.',
+      'Every cell aligns to the top of its row, so the first line of each column sits on one ' +
+        'baseline whatever else that row is carrying — a note, the shares of a split, an overdue ' +
+        'caption.',
+      'The filter bar stays on screen while the list scrolls under it. Working through a long ' +
+        'statement means narrowing repeatedly, and scrolling back to the top to change one dropdown ' +
+        'lost your place in the rows you were reading.',
+      'The Config tab’s properties lost their **Details** link — the property name beside it was ' +
+        'already a link to the same page.',
+    ],
+  },
+  {
+    date: '2026-08-13',
     title: 'Icons, links that land where you meant, and a log of what you have changed',
     points: [
       'Every property and category now carries an **icon** as well as a colour — four building ' +

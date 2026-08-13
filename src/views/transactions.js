@@ -21,6 +21,12 @@ import { categoryFilter, propertyFilter, ruleFilter, transactionTable } from './
 const filters = { text: '', status: 'all', from: '', to: '', propertyId: ANY, category: ANY, ruleId: ANY };
 /** Newest first by default, matching how a statement reads. */
 const sort = { key: 'date', dir: 'desc' };
+/**
+ * The one row whose note field is open, if any. One at a time: the field is a
+ * momentary thing opened from a link, and two half-typed notes on screen would
+ * be two chances to lose one.
+ */
+let editingNoteId = null;
 
 /**
  * Called from the Rules screen: show the transactions a rule claimed, with the
@@ -113,8 +119,11 @@ export function renderTransactions(root, rerender) {
       ),
     ),
     el(
+      // Stays on screen while the list scrolls under it: working through a long
+      // statement means narrowing repeatedly, and scrolling back to the top to
+      // change one dropdown loses your place in the rows you were reading.
       'div',
-      { class: 'filter-bar' },
+      { class: 'filter-bar sticky' },
       search,
       propertyFilter(filters.propertyId, (value) => {
         filters.propertyId = value;
@@ -165,6 +174,13 @@ export function renderTransactions(root, rerender) {
         rerender();
       },
       onAssign: (transaction, change) => void assign(transaction, change, rerender),
+      editingNoteId,
+      onEditNote: (transaction) => {
+        // Clicking the link of the row already open closes it, so the same
+        // control both opens and dismisses.
+        editingNoteId = transaction && transaction.id !== editingNoteId ? transaction.id : null;
+        rerender();
+      },
       onNote: (transaction, notes) => void saveNote(transaction, notes, rerender),
       onCreateRule: (transaction) => createRuleFrom(transaction, rerender),
       onDelete: (transaction) => {
@@ -216,7 +232,12 @@ function createRuleFrom(transaction, rerender) {
  * "waiting on the invoice" against a row should not silently recategorise it.
  */
 async function saveNote(transaction, notes, rerender) {
-  if (String(transaction.notes ?? '') === notes) return;
+  editingNoteId = null;
+  if (String(transaction.notes ?? '') === notes) {
+    // Nothing to write, but the field still has to close.
+    rerender();
+    return;
+  }
   await updateTransaction({ ...transaction, notes });
   rerender();
 }
