@@ -2,13 +2,13 @@ import { allocationsOf, isAssigned, sumAllocations } from '../allocation.js';
 import { NON_PROPERTY_ID, NON_PROPERTY_NAME, isNonProperty } from '../categories.js';
 import { filterByDate, taxYearRange } from '../dates.js';
 import { currentTaxYearRange, taxYearLabel, taxYearOf } from '../date-presets.js';
-import { download, el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
+import { download, el, entityMark, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { getState, saveTaxSettings, taxSettings } from '../store.js';
 import { estimateTax, summariseForTax } from '../tax.js';
 import { dateRangeControls } from './date-filter.js';
 import { slotClass } from '../palette.js';
-import { propertyMark } from '../icons.js';
+import { categoryMark, propertyMark } from '../icons.js';
 
 /**
  * Range state lives outside render so it survives re-renders, and opens on the
@@ -18,6 +18,16 @@ import { propertyMark } from '../icons.js';
  */
 const range = { ...currentTaxYearRange() };
 const sort = { key: 'name', dir: 'asc' };
+/**
+ * Whether the "Not a property" line is shown.
+ *
+ * Off by default. This screen exists to produce the figures a Self Assessment
+ * return wants, and personal spending is not one of them — it was already
+ * excluded from every total, so the row was a footnote that made the table
+ * longer without changing an answer. It stays one tick away for the times you
+ * want to check what has been classified that way.
+ */
+let showNonProperty = false;
 
 /**
  * What to call the Net column, given the range it is actually summing.
@@ -68,6 +78,23 @@ export function renderSummary(root, rerender) {
           rerender();
         },
       }),
+      el(
+        'label',
+        {
+          class: 'inline',
+          title: `Show a “${NON_PROPERTY_NAME}” line for personal spending and transfers. It is ` +
+            'excluded from the “All properties” totals either way.',
+        },
+        el('input', {
+          type: 'checkbox',
+          checked: showNonProperty,
+          onchange: (event) => {
+            showNonProperty = event.target.checked;
+            rerender();
+          },
+        }),
+        ` Include ${NON_PROPERTY_NAME.toLowerCase()}`,
+      ),
     ),
     el(
       'p',
@@ -97,11 +124,12 @@ export function renderSummary(root, rerender) {
   // tax return should not show £-30.160000000000004 in any export.
   const sum = (list) => sumAllocations(list);
 
-  // Rows are the real properties, plus a "Not a property" line whenever
-  // anything has been classified that way — visible rather than quietly
-  // excluded, but kept out of the property totals below.
+  // Rows are the real properties, plus a "Not a property" line when there is
+  // any such money *and* you have asked to see it. Either way it is kept out
+  // of the property totals below.
   const propertyRows = [...properties];
-  const hasNonProperty = shares.some((s) => isNonProperty(s.propertyId));
+  const anyNonProperty = shares.some((s) => isNonProperty(s.propertyId));
+  const hasNonProperty = anyNonProperty && showNonProperty;
   if (hasNonProperty) propertyRows.push({ id: NON_PROPERTY_ID, name: NON_PROPERTY_NAME });
 
   if (propertyRows.length === 0) {
@@ -154,13 +182,13 @@ export function renderSummary(root, rerender) {
           {},
           sTh('Property', 'name'),
           ...categories.map((c) =>
-            sortableTh(
-              c.name,
-              `cat:${c.id}`,
-              sort,
-              onSort,
-              { class: 'num', title: c.description || `Sort by ${c.name}` },
-            ),
+            sortableTh(c.name, `cat:${c.id}`, sort, onSort, {
+              class: 'num',
+              title: c.description || `Sort by ${c.name}`,
+              // The column wears the same mark the category wears everywhere
+              // else, so a column of figures is identifiable without reading.
+              mark: entityMark(slotClass(c), categoryMark(c)),
+            }),
           ),
           sTh(net.label, 'net', { class: 'num', title: net.title }),
         ),
@@ -205,10 +233,20 @@ export function renderSummary(root, rerender) {
         ? el(
             'p',
             { class: 'hint' },
-            'The “Not a property” line is shown for completeness and is excluded from the ' +
+            `The “${NON_PROPERTY_NAME}” line is shown for completeness and is excluded from the ` +
               '“All properties” totals.',
           )
-        : null,
+        : // Money classified as personal is out of these figures either way, but
+          // saying so beats letting a total quietly not add up to the statement.
+          anyNonProperty
+          ? el(
+              'p',
+              { class: 'hint' },
+              `${money(sum(shares.filter((s) => isNonProperty(s.propertyId))))} in this range is ` +
+                `classified as “${NON_PROPERTY_NAME}” and is not counted here. ` +
+                'Tick the box above to see it as its own line.',
+            )
+          : null,
     ),
     el(
       'div',

@@ -410,6 +410,28 @@ th.num .sort-button {
   text-align: right;
 }
 
+/*
+ * A heading carrying its category's mark. Inline-flex rather than an inline
+ * icon so the mark stays beside the label when the label wraps, instead of
+ * being orphaned above it — a numeric column is narrow and long names do wrap.
+ */
+.sort-button:has(.entity-icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+th.num .sort-button:has(.entity-icon) {
+  justify-content: flex-end;
+}
+
+/* Headings are uppercase and muted; the mark keeps its own colour, which is
+   the point of it, but drops to the same weight as the text beside it. */
+.sort-button .entity-icon {
+  width: 12px;
+  height: 12px;
+}
+
 .sort-button:hover {
   color: var(--ink);
   background: var(--panel);

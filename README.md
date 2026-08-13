@@ -359,6 +359,12 @@ light-mode slots sit below 3:1 against the surface, so the name always travels w
 plain square reads as a bug rather than a choice. A stored icon that is no longer in the bank (an
 old backup, a changed set) falls back rather than rendering nothing.
 
+**Category columns wear their mark in the heading** — on the Summary table and in a property's
+Monthly breakdown — so a column of figures is identifiable without reading, and matches the chart
+legend directly above the breakdown. The heading becomes an inline flex row rather than an inline
+icon, so a long category name wrapping in a narrow numeric column takes its mark with it instead of
+orphaning it on the line above.
+
 ## Tax estimate
 
 The **Summary** tab estimates the income tax due on the property profit for whatever date range is
@@ -418,9 +424,13 @@ Doing so *classifies* the transaction — it **leaves the "needs review" count i
 category needed, since money that never reaches the property accounts doesn't need categorising —
 while staying out of the property figures:
 
-- the Summary shows **Not a property** on its own line, below the properties, for completeness;
 - it is **excluded from the "All properties" totals**, which is the figure a Self Assessment return
   needs;
+- the Summary hides it by default, behind an **Include not a property** tick box. It was never in
+  the totals, so the row made the table longer without changing an answer. When there *is* such
+  money and the box is off, a line under the table says how much is being left out — a total that
+  quietly does not reconcile with your statement is worse than one extra row;
+- ticked, it appears on its own line pinned below the properties, still outside the totals;
 - a split can send part of a transaction to a property and the rest to Not a property.
 
 ## How rules match
@@ -577,8 +587,8 @@ them. Two details worth knowing:
 - On the **Rules** table the `#` column is the rule's position in *evaluation* order, worked out
   before any sorting — re-sorting the table never misstates which rule fires first.
 - On the **Summary**, sorting by a category column ranks properties by what they earned or spent
-  under it. The "Not a property" line stays pinned to the bottom, since it is a footnote rather than
-  one of the ranked rows.
+  under it. The "Not a property" line, when shown, stays pinned to the bottom, since it is a
+  footnote rather than one of the ranked rows.
 - The Summary's net column is **named for the period it is actually summing**. Pick a tax year and
   it reads "Net income 2026/27"; pick anything else and it says the span it covers, or "(all
   dates)". A column headed with a tax year it doesn't contain is worse than an unlabelled one.

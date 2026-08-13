@@ -10,14 +10,14 @@ import { capSeries, legend, stackedColumns } from '../charts.js';
 import { DUE_SOON_DAYS, complianceStatus } from '../compliance.js';
 import { addDays, addMonths, taxYearRange } from '../dates.js';
 import { currentTaxYearRange, taxYearLabel, taxYearOf } from '../date-presets.js';
-import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
+import { el, entityMark, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { highlight } from '../focus.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { ANY, filterTransactions } from '../transaction-filter.js';
 import { dateRangeControls } from './date-filter.js';
 import { categoryFilter, transactionTable } from './transaction-table.js';
 import { slotClass } from '../palette.js';
-import { propertyMark } from '../icons.js';
+import { categoryMark, propertyMark } from '../icons.js';
 import {
   SECTIONS,
   currentRecord,
@@ -1390,6 +1390,9 @@ function renderMonthlyBreakdown(root, shares, categories, rerender) {
             sortableTh(c.name, `cat:${c.id}`, matrixSort, onSort, {
               class: 'num',
               title: c.description || `Sort by ${c.name}`,
+              // Same mark as the chart legend directly above it, so a column
+              // and its band of colour are recognisably the same category.
+              mark: entityMark(slotClass(c), categoryMark(c)),
             }),
           ),
           mTh('Net', 'net', { class: 'num' }),

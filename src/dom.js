@@ -111,6 +111,9 @@ export function sortableTh(label, key, state, onSort, options = {}) {
         title: options.title ?? `Sort by ${label}`,
         onclick: () => onSort(key),
       },
+      // A category column carries its mark, so the heading and the cells below
+      // it are identified the same way as the same category everywhere else.
+      options.mark ?? null,
       label,
       el('span', { class: 'sort-arrow', 'aria-hidden': 'true' }, sortIndicator(state, key)),
     ),

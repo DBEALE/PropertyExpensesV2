@@ -20,6 +20,19 @@
 export const RELEASES = [
   {
     date: '2026-08-13',
+    title: 'Category marks on column headings, and a quieter Summary',
+    points: [
+      'Category columns on the Summary tab and in a property’s Monthly breakdown carry that ' +
+        'category’s icon in its own colour, so a column of figures is identifiable without reading ' +
+        'the heading — and matches the chart legend directly above it.',
+      'The Summary no longer shows a “Not a property” line by default. It was already excluded ' +
+        'from every total, so it made the table longer without changing an answer. An **Include not ' +
+        'a property** tick box brings it back, and when there is such money but the box is off, a ' +
+        'line under the table says how much is being left out.',
+    ],
+  },
+  {
+    date: '2026-08-13',
     title: 'A tighter transactions table',
     points: [
       'Notes are written from an **Add note** link in the last column, which opens a field under the ' +
