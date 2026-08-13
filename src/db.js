@@ -4,7 +4,8 @@ const DB_NAME = 'property-expenses';
 // v4 added complianceTypes and complianceCompletions: the inspection schedule.
 // v5 added settings: the tax parameters behind the Summary estimate.
 // v6 added complianceExemptions: which certificates don't apply to a property.
-const DB_VERSION = 6;
+// v7 added changeLog: what has been edited since the last backup.
+const DB_VERSION = 7;
 
 export const STORES = [
   'properties',
@@ -16,6 +17,7 @@ export const STORES = [
   'settings',
   'rules',
   'transactions',
+  'changeLog',
 ];
 
 let dbPromise = null;

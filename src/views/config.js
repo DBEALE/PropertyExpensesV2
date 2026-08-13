@@ -2,7 +2,8 @@ import { categoryIdFor } from '../categories.js';
 import { complianceTypeIdFor } from '../compliance.js';
 import { newId } from '../db.js';
 import { SLOTS, nextSlot, slotOf } from '../palette.js';
-import { el, entityTag, sortableTh, swatch, toast } from '../dom.js';
+import { categoryMark, iconOf, iconsFor, propertyMark } from '../icons.js';
+import { el, entityMark, entityTag, sortableTh, swatch, toast } from '../dom.js';
 import { sortRows, toggleSort } from '../sort.js';
 import {
   categoryUsage,
@@ -37,6 +38,35 @@ function colourPicker(record, onPick) {
         'aria-pressed': slot.key === current ? 'true' : 'false',
         onclick: () => void onPick(slot.key),
       }),
+    ),
+  );
+}
+
+/**
+ * The icon bank as a row of buttons, drawn in the record's own colour.
+ *
+ * Shown in the record's colour rather than a neutral one so the choice is made
+ * against what it will actually look like: an icon is a second identity channel
+ * beside the hue, not a separate decision from it.
+ */
+function iconPicker(record, kind, onPick) {
+  const current = iconOf(record, kind);
+  return el(
+    'div',
+    { class: 'icon-picker' },
+    ...iconsFor(kind).map((icon) =>
+      el(
+        'button',
+        {
+          type: 'button',
+          class: `icon-option${icon.key === current ? ' selected' : ''}`,
+          title: icon.label,
+          'aria-label': `${icon.label} for ${record.name}`,
+          'aria-pressed': icon.key === current ? 'true' : 'false',
+          onclick: () => void onPick(icon.key),
+        },
+        entityMark(`slot-${slotOf(record)}`, icon),
+      ),
     ),
   );
 }
@@ -107,6 +137,7 @@ export function renderConfig(root, rerender) {
             {},
             pTh('Name', 'name'),
             el('th', {}, 'Colour'),
+            el('th', { title: 'The mark shown wherever this property appears' }, 'Icon'),
             pTh('Rules', 'rules', { class: 'num' }),
             pTh('Transactions', 'transactions', { class: 'num' }),
             el('th', {}, ''),
@@ -125,10 +156,15 @@ export function renderConfig(root, rerender) {
                 el(
                   'a',
                   { href: `#/properties/${encodeURIComponent(property.id)}`, class: 'property-link' },
-                  entityTag(property.name, `slot-${slotOf(property)}`),
+                  entityTag(property.name, `slot-${slotOf(property)}`, undefined, propertyMark(property)),
                 ),
               ),
               el('td', {}, colourPicker(property, (colour) => saveProperty({ ...property, colour }).then(rerender))),
+              el(
+                'td',
+                {},
+                iconPicker(property, 'property', (icon) => saveProperty({ ...property, icon }).then(rerender)),
+              ),
               el('td', { class: 'num' }, String(ruleCount)),
               el('td', { class: 'num' }, String(txCount)),
               el(
@@ -417,6 +453,7 @@ function renderCategories(root, rerender) {
           cTh('Name', 'name'),
           cTh('Description', 'description'),
           el('th', {}, 'Colour'),
+          el('th', { title: 'The mark shown wherever this category appears' }, 'Icon'),
           cTh('Rules', 'rules', { class: 'num' }),
           cTh('Transactions', 'transactions', { class: 'num' }),
           el('th', {}, ''),
@@ -452,12 +489,17 @@ function renderCategories(root, rerender) {
           return el(
             'tr',
             {},
-            el('td', { class: 'with-swatch' }, swatch(`slot-${slotOf(category)}`, category.name), name),
+            el('td', { class: 'with-swatch' }, swatch(`slot-${slotOf(category)}`, category.name, categoryMark(category)), name),
             el('td', {}, description),
             el(
               'td',
               {},
               colourPicker(category, (colour) => saveCategory({ ...category, colour }).then(rerender)),
+            ),
+            el(
+              'td',
+              {},
+              iconPicker(category, 'category', (icon) => saveCategory({ ...category, icon }).then(rerender)),
             ),
             el('td', { class: 'num' }, String(usage.rules)),
             el('td', { class: 'num' }, String(usage.transactions)),

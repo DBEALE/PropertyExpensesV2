@@ -39,8 +39,10 @@ third-party service.
   stopped arriving, compliance certificates (gas safety, EICR, PAT, legionella) overdue or due
   within 30 days, and records you have not filled in yet. The count sits on the Properties tab.
 - **What's new** — a changelog of the app itself, at the far right of the tab row.
-- **Colour identity** — every property and category carries a colour, used consistently on every
-  screen.
+- **Colour and icon identity** — every property and category carries a colour and an icon, chosen on
+  Config and used consistently on every screen.
+- **Change log** — the Backup tab lists what you have edited since your last download, cleared when
+  you take a new one.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
   (6 April – 5 April), exportable to CSV, with an income tax estimate that handles the 20% finance
   cost credit.
@@ -87,12 +89,14 @@ Below it, three more cross-property tables:
   certificate next falls due there. Reading a *column* answers "which properties need a gas safety
   check", which is the question that actually gets asked.
 
-Dates in all three colour themselves the same way: red and labelled **Overdue** once past, amber
-within 90 days, plain otherwise. Anything not yet recorded says so rather than showing a blank or a
-made-up date. Every table sorts, and every property name drills in.
+Dates in all three colour themselves the same way: red and labelled **Overdue** once past, badged
+**Due soon** within 30 days, tinted amber within three months, plain otherwise. Anything not yet
+recorded says so rather than showing a blank or a made-up date; a certificate marked not applicable
+reads **N/A**. Every table sorts, and every property name drills in — to the panel that holds what
+you clicked, as described under [Getting between screens](#getting-between-screens).
 
-**Click a property name to drill into it.** From there, **← All properties** goes back, and the
-dropdown beside the heading switches directly between properties.
+**Click a property name to drill into it.** The dropdown that titles the property page switches
+between properties, and its first entry comes back here.
 
 The tab returns you to wherever you left it: the overview on a first visit, or the property you were
 reading. The id sits in the URL (`#/properties/<id>`), so a refresh or a bookmark comes back to the
@@ -312,11 +316,11 @@ Deleting a category deletes the rules that use it and unassigns the transactions
 the transactions themselves are kept. The table shows both counts before you confirm. The last
 remaining category can't be deleted.
 
-## Colours
+## Colours and icons
 
-Every property and category is assigned one of **eight fixed colours**, shown as a small swatch
-beside its name everywhere it appears — the transactions table, rules, the import preview, the
-summary, and the cashflow chart. Change one on the **Config** tab and it changes everywhere at once.
+Every property and category carries an **icon in one of eight fixed colours**, shown beside its name
+everywhere it appears — the transactions table, rules, the import preview, the summary, and the
+cashflow chart. Change either on the **Config** tab and it changes everywhere at once.
 
 The palette is a fixed set of eight rather than a free colour picker, and that is deliberate:
 
@@ -332,6 +336,28 @@ The palette is a fixed set of eight rather than a free colour picker, and that i
 New properties and categories take the next unused slot, so a small portfolio gets the
 best-separated colours first. Records created before colours existed get a stable colour derived
 from their id, so nothing is ever uncoloured and nothing shifts between sessions.
+
+### The icon bank
+
+**Four** for properties — House, Flat, Bungalow, Mansion — and **ten** for categories: Key (rent),
+Shield (insurance), Nut (repairs), Percent (interest), Briefcase (management), Bolt (utilities),
+Droplet (water), Tree (grounds), Document (fees), Tag (other). The first five match the seeded
+categories, so the marks are right before anyone picks anything.
+
+They are drawn in `src/icons.js` as SVG path data — no network, no image files, nothing to 404 when
+the app is served from a repo subpath or opened offline. Every one is a *filled* shape with no
+strokes, so a single CSS rule (`fill: var(--entity)`) tints the whole set from the record's palette
+slot: change the colour and the icon follows without anything being regenerated.
+
+Holes — windows, doorways, the eye of a key — are extra subpaths cut with `fill-rule: evenodd`
+rather than painted in the surface colour, which would break the moment the surface changed: dark
+mode, a highlighted row, a chart background.
+
+The icon is a **second channel beside the colour, never a replacement for the name**. Three of the
+light-mode slots sit below 3:1 against the surface, so the name always travels with the mark, and
+`iconOf` always returns something — a portfolio where three properties have a mark and two have a
+plain square reads as a bug rather than a choice. A stored icon that is no longer in the bank (an
+old backup, a changed set) falls back rather than rendering nothing.
 
 ## Tax estimate
 
@@ -551,6 +577,20 @@ them. Two details worth knowing:
 - The **match count** on the Rules tab opens the Transactions tab filtered to that rule.
 - A transaction jumped to from elsewhere is scrolled to and highlighted; if your current filters
   would hide it, they're cleared and you're told why.
+- A property link opens that property **on the panel you asked about**, not on whichever one you
+  happened to leave open last time:
+
+  | Clicked in | Lands on |
+  | --- | --- |
+  | the main properties table | Overview |
+  | the Insurance table | Overview, with the Insurance tile scrolled to and flashed |
+  | the Tenancies table | Overview, with the Tenancy tile scrolled to and flashed |
+  | the Compliance table | Compliance |
+  | the Needs attention list | whatever is wrong — Recurring payments for a late payment, Compliance for a lapsed certificate |
+
+  Clicking a property in the Tenancies table and arriving somewhere else is a small betrayal: you
+  asked about that property's *tenancy*. The section flash uses the same one-shot hand-off as the
+  transaction and rule links, so coming back to the page later does not repeat it.
 
 ### Evaluation order
 
@@ -686,6 +726,35 @@ The digest is FNV-1a over every backed-up store, computed once per load rather t
 deliberately excludes `settings` — the backup bookmark lives there, so including it would make
 recording a backup immediately invalidate it.
 
+### What has changed since it
+
+The dot says *that* something changed; the Backup page also lists **what**, so "should I back up
+before clearing my browser" becomes a decision made on evidence:
+
+```
+13/08/2026
+  23:54  transaction   Assigned 24/07/2026 LOCAL BUILDER LTD to 3 Peterborough Gardens · Repairs
+  23:54  compliance    Gas Safety marked not applicable for Flat 4, Mill Court
+  23:52  property      Property 3 Peterborough Gardens: colour changed to green
+```
+
+Two rules keep it readable rather than exhaustive:
+
+- **One entry per action, not per record.** Importing a statement is one line saying how many rows
+  arrived, not four hundred. Every mutation in `store.js` logs exactly once, and works out what to
+  say by comparing the record with what was there before — "renamed from Ash Close" rather than
+  "property saved", because five identical lines answer nothing.
+- **Cleared when a backup is downloaded**, because the question it answers is only ever "since the
+  last one". Nothing here is history; the data itself is the history.
+
+The log is capped at 400 entries, oldest dropped first, and the page says so when it has trimmed —
+someone who imports for a year without backing up should not carry a hundred thousand rows in
+IndexedDB for a list nobody reads to the end of. It is not written into the backup file: it
+describes the gap between backups, so a restore starts it empty.
+
+Logging failures are swallowed. Losing a log line is a much smaller problem than a save that appears
+to fail because its bookkeeping did.
+
 ## What's new
 
 `src/whats-new.js` is a list of releases — date, title, and the points worth telling a user about —
@@ -708,11 +777,13 @@ src/
   allocation.js       splitting a transaction across properties, in whole pence
   categories.js       default categories and the non-property sentinel
   palette.js          the eight identity colour slots
+  icons.js            the property and category icon banks
   accounts.js         monthly totals and recurring-payment detection
   property-details.js dated property records, LTV, upcoming dates, missing sections
   compliance.js       inspection schedule: next due, overdue, due soon, not applicable
   attention.js        one tally of what a property wants, shared by badge/banner/table
   whats-new.js        the changelog the app shows about itself
+  change-log.js       what has been edited since the last backup
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
   responsive.js       card-mode cell labels and the mobile sort control

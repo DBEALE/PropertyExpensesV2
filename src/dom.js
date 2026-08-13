@@ -34,20 +34,54 @@ export function clear(node) {
 }
 
 /**
- * A property or category as it appears anywhere on screen: its colour swatch
- * followed by its name. The name is always present — three of the light-mode
- * slots sit below 3:1 against the surface, so colour never carries the meaning
- * on its own.
+ * The mark for a property or category: its icon, drawn in its palette colour.
+ *
+ * An inline SVG rather than a font glyph or an image, so it inherits the slot's
+ * custom property and needs nothing loaded. Always `aria-hidden` — the name is
+ * beside it, and a screen reader announcing "house" before every property would
+ * be noise.
+ *
+ * @param {string} slotClass e.g. "slot-blue", from palette.js
+ * @param {{d: string, rule?: string}|null} icon from icons.js, or null for a plain swatch
+ * @param {string} [label] tooltip, when the mark stands alone
+ */
+export function entityMark(slotClass, icon, label) {
+  if (!icon) {
+    return el('span', {
+      class: `swatch ${slotClass}`,
+      'aria-hidden': 'true',
+      title: label,
+    });
+  }
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', `entity-icon ${slotClass}`);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  if (label) svg.setAttribute('title', label);
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', icon.d);
+  if (icon.rule) path.setAttribute('fill-rule', icon.rule);
+  svg.append(path);
+  return svg;
+}
+
+/**
+ * A property or category as it appears anywhere on screen: its mark followed by
+ * its name. The name is always present — three of the light-mode slots sit
+ * below 3:1 against the surface, so colour never carries the meaning on its
+ * own, and the icon is a second channel rather than a replacement.
  *
  * @param {string} name
  * @param {string} slotClass e.g. "slot-blue", from palette.js
  * @param {string} [description] shown as a tooltip
+ * @param {object|null} [icon] from icons.js
  */
-export function entityTag(name, slotClass, description) {
+export function entityTag(name, slotClass, description, icon = null) {
   return el(
     'span',
     { class: `entity ${slotClass}`, title: description || name },
-    el('span', { class: 'swatch', 'aria-hidden': 'true' }),
+    entityMark(slotClass, icon),
     name,
   );
 }
@@ -83,9 +117,16 @@ export function sortableTh(label, key, state, onSort, options = {}) {
   );
 }
 
-/** A bare swatch, for places that already show the name in an adjacent cell. */
-export function swatch(slotClass, label) {
-  return el('span', { class: `swatch standalone ${slotClass}`, title: label, role: 'img', 'aria-label': label });
+/** A bare mark, for places that already show the name in an adjacent cell. */
+export function swatch(slotClass, label, icon = null) {
+  const mark = entityMark(slotClass, icon, label);
+  mark.classList.add('standalone');
+  // Standing alone it is the only thing identifying the record in that spot,
+  // so unlike the mark inside an entityTag it gets a name of its own.
+  mark.setAttribute('role', 'img');
+  mark.setAttribute('aria-label', label);
+  mark.removeAttribute('aria-hidden');
+  return mark;
 }
 
 /** Formats a signed amount as £1,234.56 / -£1,234.56. */

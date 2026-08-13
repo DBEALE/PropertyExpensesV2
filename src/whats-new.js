@@ -20,6 +20,22 @@
 export const RELEASES = [
   {
     date: '2026-08-13',
+    title: 'Icons, links that land where you meant, and a log of what you have changed',
+    points: [
+      'Every property and category now carries an **icon** as well as a colour — four building ' +
+        'types for properties, ten marks for categories — pickable on the Config tab and shown ' +
+        'wherever that record appears. Change the colour and the icon follows it.',
+      'Clicking a property in the Insurance or Tenancies table opens that property on its Overview ' +
+        'panel with the section you asked about scrolled to and flashed. From the Compliance table ' +
+        'you land on its Compliance panel, and from the main table on Overview.',
+      'The “Needs attention” list goes straight to whatever is wrong: a late payment opens ' +
+        'Recurring payments, a lapsed certificate opens Compliance.',
+      'The Backup tab now lists **what** has changed since your last backup, not just that ' +
+        'something has — grouped by day, one line per action. Downloading a backup clears it.',
+    ],
+  },
+  {
+    date: '2026-08-13',
     title: 'Your own notes, and a chart that shows the bottom line',
     points: [
       'Every transaction can carry a note of your own — why a repair cost what it did, which tenant ' +

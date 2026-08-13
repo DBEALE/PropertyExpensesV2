@@ -10,9 +10,11 @@ import { isKnownCategory, selectableProperties } from '../categories.js';
 import { describeRule, orderRules, rulePositions, ruleLabel as ruleName } from '../rules.js';
 import {
   categoryName,
+  categoryIcon,
   categorySlot,
   getState,
   propertyName,
+  propertyIcon,
   propertySlot,
 } from '../store.js';
 import { sortRows } from '../sort.js';
@@ -101,7 +103,7 @@ export function transactionTable(transactions, options) {
           el(
             'div',
             { class: 'swatch-row' },
-            swatch(propertySlot(transaction.propertyId), propertyName(transaction.propertyId)),
+            swatch(propertySlot(transaction.propertyId), propertyName(transaction.propertyId), propertyIcon(transaction.propertyId)),
             el(
               'select',
               {
@@ -125,7 +127,7 @@ export function transactionTable(transactions, options) {
           el(
             'div',
             { class: 'swatch-row' },
-            swatch(categorySlot(transaction.category), categoryName(transaction.category)),
+            swatch(categorySlot(transaction.category), categoryName(transaction.category), categoryIcon(transaction.category)),
             el(
               'select',
               {
@@ -236,8 +238,8 @@ export function transactionTable(transactions, options) {
           ? el('div', { class: 'share' }, `of ${money(transaction.amount)}`)
           : null,
       ),
-      cell((share) => entityTag(propertyName(share.propertyId), propertySlot(share.propertyId))),
-      cell((share) => entityTag(categoryName(share.category), categorySlot(share.category))),
+      cell((share) => entityTag(propertyName(share.propertyId), propertySlot(share.propertyId), undefined, propertyIcon(share.propertyId))),
+      cell((share) => entityTag(categoryName(share.category), categorySlot(share.category), undefined, categoryIcon(share.category))),
       el(
         'td',
         {},
@@ -266,10 +268,10 @@ export function transactionTable(transactions, options) {
   function tagFor(propertyId, category, which) {
     if (which === 'property') {
       if (!propertyId) return el('span', { class: 'unset' }, 'unassigned');
-      return entityTag(propertyName(propertyId), propertySlot(propertyId));
+      return entityTag(propertyName(propertyId), propertySlot(propertyId), undefined, propertyIcon(propertyId));
     }
     if (!category) return el('span', { class: 'unset' }, 'none');
-    return entityTag(categoryName(category), categorySlot(category));
+    return entityTag(categoryName(category), categorySlot(category), undefined, categoryIcon(category));
   }
 
   function statusCell(transaction) {

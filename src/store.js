@@ -1,9 +1,11 @@
 import { hasSplit } from './allocation.js';
 import { DEFAULT_CATEGORIES, NON_PROPERTY_NAME, isNonProperty } from './categories.js';
 import { DEFAULT_COMPLIANCE_TYPES, completionsForType, exemptionId } from './compliance.js';
+import { iconByKey, iconOf } from './icons.js';
 import { withDefaults } from './tax.js';
 import { slotClass } from './palette.js';
-import { supersede } from './property-details.js';
+import { sectionByKey, supersede } from './property-details.js';
+import { newestFirst, overflowIds, plural } from './change-log.js';
 import * as db from './db.js';
 import { recategorise } from './importer.js';
 import { validateBackup } from './backup.js';
@@ -19,6 +21,7 @@ const state = {
   settings: [],
   rules: [],
   transactions: [],
+  changeLog: [],
 };
 const listeners = new Set();
 
@@ -52,6 +55,7 @@ export async function load() {
     settings,
     rules,
     transactions,
+    changeLog,
   ] = await Promise.all([
     db.getAll('properties'),
     db.getAll('categories'),
@@ -62,6 +66,7 @@ export async function load() {
     db.getAll('settings'),
     db.getAll('rules'),
     db.getAll('transactions'),
+    db.getAll('changeLog'),
   ]);
   // First run, or an install predating editable categories: seed the five
   // defaults. Their ids match the names older records stored, so existing
@@ -85,8 +90,79 @@ export async function load() {
   state.settings = settings;
   state.rules = rules;
   state.transactions = transactions.sort((a, b) => b.date.localeCompare(a.date));
+  state.changeLog = changeLog;
   signature = signatureOf(state);
   notify();
+}
+
+/**
+ * Records one edit.
+ *
+ * Every mutation below calls this once — per *action*, not per record — before
+ * reloading, so the log and the data can never disagree about what happened.
+ * Failures here are swallowed: losing a log line is a much smaller problem
+ * than a save that appears to fail because its bookkeeping did.
+ *
+ * @param {string} kind what sort of record
+ * @param {string} summary one line, in the user's terms
+ */
+async function log(kind, summary) {
+  try {
+    await db.put('changeLog', { id: db.newId(), at: new Date().toISOString(), kind, summary });
+    const stale = overflowIds(await db.getAll('changeLog'));
+    for (const id of stale) await db.remove('changeLog', id);
+  } catch {
+    // Nothing to do and nothing worth telling the user: the edit itself landed.
+  }
+}
+
+/**
+ * "Added X" / "Renamed X to Y" / "Changed the colour of X" — the log line for a
+ * save, worked out by comparing the record with what was there before.
+ *
+ * Naming *what* changed rather than logging "Property saved": the whole point
+ * of the log is deciding whether the last hour's work is worth backing up, and
+ * five identical lines answer nothing.
+ */
+function describeSave(noun, before, after) {
+  if (!before) return `Added ${noun.toLowerCase()} ${after.name}`;
+  const changes = [];
+  if (before.name !== after.name) changes.push(`renamed from ${before.name}`);
+  if (before.colour !== after.colour) changes.push(`colour changed to ${after.colour}`);
+  if (before.icon !== after.icon) changes.push(`icon changed to ${after.icon}`);
+  if ((before.description ?? '') !== (after.description ?? '')) changes.push('description edited');
+  if (String(before.frequencyMonths) !== String(after.frequencyMonths)) {
+    changes.push(`frequency changed to ${after.frequencyMonths} months`);
+  }
+  return changes.length > 0
+    ? `${noun} ${after.name}: ${changes.join(', ')}`
+    : `${noun} ${after.name} saved`;
+}
+
+/** The log line for one transaction edit, naming which field moved. */
+function describeTransactionEdit(before, after) {
+  const what = `${after.date} ${after.details}`;
+  if (!before) return `Added ${what}`;
+  if (String(before.notes ?? '') !== String(after.notes ?? '')) {
+    return `${after.notes ? 'Noted against' : 'Cleared the note on'} ${what}`;
+  }
+  if (before.propertyId !== after.propertyId || before.category !== after.category) {
+    const to = [propertyName(after.propertyId), categoryName(after.category)].filter(Boolean).join(' · ');
+    return to ? `Assigned ${what} to ${to}` : `Unassigned ${what}`;
+  }
+  if (hasSplit(before) !== hasSplit(after)) {
+    return `${hasSplit(after) ? 'Split' : 'Un-split'} ${what}`;
+  }
+  return `Edited ${what}`;
+}
+
+/** A section key as the label the user sees on the property page. */
+function sectionLabel(key) {
+  return sectionByKey(key)?.label ?? key;
+}
+
+function complianceTypeName(id) {
+  return state.complianceTypes.find((t) => t.id === id)?.name ?? id;
 }
 
 /** @param {string|null} id */
@@ -131,10 +207,28 @@ export function categorySlot(id) {
   return record ? slotClass(record) : 'slot-neutral';
 }
 
+/**
+ * The icon for an id, for the many call sites that hold an id rather than the
+ * record. Unknown ids — a deleted property, "Not a property" — get no icon and
+ * fall back to the plain swatch, which is the honest mark for a thing that is
+ * not one of your records.
+ */
+export function propertyIcon(id) {
+  const record = propertyRecord(id);
+  return record && !isNonProperty(id) ? iconByKey('property', iconOf(record, 'property')) : null;
+}
+
+export function categoryIcon(id) {
+  const record = categoryRecord(id);
+  return record ? iconByKey('category', iconOf(record, 'category')) : null;
+}
+
 // --- Categories ---------------------------------------------------------
 
 export async function saveCategory(category) {
+  const before = state.categories.find((c) => c.id === category.id);
   await db.put('categories', category);
+  await log('category', describeSave('Category', before, category));
   await load();
 }
 
@@ -144,6 +238,12 @@ export async function saveCategory(category) {
  * whose remaining shares would no longer total the transaction.
  */
 export async function deleteCategory(id) {
+  const usage = categoryUsage(id);
+  await log(
+    'category',
+    `Deleted category ${categoryName(id)}` +
+      (usage.transactions > 0 ? `, unassigning ${plural(usage.transactions, 'transaction')}` : ''),
+  );
   await db.remove('categories', id);
   for (const rule of state.rules.filter((r) => referencesCategory(r, id))) {
     await db.remove('rules', rule.id);
@@ -169,11 +269,15 @@ export function categoryUsage(id) {
 // --- Properties ---------------------------------------------------------
 
 export async function saveProperty(property) {
+  const before = state.properties.find((p) => p.id === property.id);
   await db.put('properties', property);
+  await log('property', describeSave('Property', before, property));
   await load();
 }
 
 export async function deleteProperty(id) {
+  // Logged before the delete, while the name is still resolvable.
+  await log('property', `Deleted property ${propertyName(id)}`);
   await db.remove('properties', id);
   // Detach the property from anything referencing it, so no dangling ids
   // remain — including rules and transactions that only mention it in a split.
@@ -225,11 +329,23 @@ export async function savePropertyDetail({ propertyId, section, data, effectiveF
   });
   const writes = superseded ? [superseded, record] : [record];
   await db.putMany('propertyDetails', writes);
+  await log(
+    'details',
+    `${superseded ? 'Updated' : 'Recorded'} ${sectionLabel(section)} for ${propertyName(propertyId)}` +
+      (superseded ? ' — the previous version was kept' : ''),
+  );
   await load();
 }
 
 /** Deletes one historical record — for a mistake, not for tidying up. */
 export async function deletePropertyDetail(id) {
+  const record = state.propertyDetails.find((d) => d.id === id);
+  if (record) {
+    await log(
+      'details',
+      `Deleted a historical ${sectionLabel(record.section)} record for ${propertyName(record.propertyId)}`,
+    );
+  }
   await db.remove('propertyDetails', id);
   await load();
 }
@@ -241,7 +357,9 @@ export function detailsFor(propertyId) {
 // --- Compliance ---------------------------------------------------------
 
 export async function saveComplianceType(type) {
+  const before = state.complianceTypes.find((t) => t.id === type.id);
   await db.put('complianceTypes', type);
+  await log('compliance', describeSave('Compliance type', before, type));
   await load();
 }
 
@@ -252,6 +370,13 @@ export async function saveComplianceType(type) {
  * backup validator would reject the next export.
  */
 export async function deleteComplianceType(id) {
+  const type = state.complianceTypes.find((t) => t.id === id);
+  const { completions } = complianceTypeUsage(id);
+  await log(
+    'compliance',
+    `Deleted compliance type ${type?.name ?? id}` +
+      (completions > 0 ? `, and ${plural(completions, 'logged completion')}` : ''),
+  );
   await db.remove('complianceTypes', id);
   for (const completion of completionsForType(state.complianceCompletions, id)) {
     await db.remove('complianceCompletions', completion.id);
@@ -275,11 +400,23 @@ export async function saveComplianceCompletion({ propertyId, complianceTypeId, c
     reference: reference ?? '',
     notes: notes ?? '',
   });
+  await log(
+    'compliance',
+    `Logged ${complianceTypeName(complianceTypeId)} for ${propertyName(propertyId)}, completed ${completedDate}`,
+  );
   await load();
 }
 
 /** Deletes one logged completion — for correcting a mistaken entry. */
 export async function deleteComplianceCompletion(id) {
+  const entry = state.complianceCompletions.find((c) => c.id === id);
+  if (entry) {
+    await log(
+      'compliance',
+      `Removed the ${entry.completedDate} ${complianceTypeName(entry.complianceTypeId)} entry for ` +
+        propertyName(entry.propertyId),
+    );
+  }
   await db.remove('complianceCompletions', id);
   await load();
 }
@@ -294,6 +431,11 @@ export async function setComplianceExempt(propertyId, complianceTypeId, exempt) 
   const id = exemptionId(propertyId, complianceTypeId);
   if (exempt) await db.put('complianceExemptions', { id, propertyId, complianceTypeId });
   else await db.remove('complianceExemptions', id);
+  await log(
+    'compliance',
+    `${complianceTypeName(complianceTypeId)} marked ${exempt ? 'not applicable' : 'applicable again'} for ` +
+      propertyName(propertyId),
+  );
   await load();
 }
 
@@ -306,18 +448,25 @@ export function taxSettings() {
 }
 
 export async function saveTaxSettings(settings) {
+  const before = taxSettings();
+  const changed = Object.keys(settings).filter((key) => String(before[key]) !== String(settings[key]));
   await db.put('settings', { ...settings, id: 'tax' });
+  if (changed.length > 0) await log('settings', `Changed tax settings: ${changed.join(', ')}`);
   await load();
 }
 
 // --- Rules --------------------------------------------------------------
 
 export async function saveRule(rule) {
+  const before = state.rules.find((r) => r.id === rule.id);
   await db.put('rules', rule);
+  await log('rule', `${before ? 'Edited' : 'Added'} the rule matching “${rule.matchText}”`);
   await load();
 }
 
 export async function deleteRule(id) {
+  const rule = state.rules.find((r) => r.id === id);
+  await log('rule', `Deleted the rule matching “${rule?.matchText ?? id}”`);
   await db.remove('rules', id);
   await load();
 }
@@ -330,6 +479,7 @@ export async function reapplyRules() {
   const updated = recategorise(state.transactions, state.rules);
   if (updated.length > 0) {
     await db.putMany('transactions', updated);
+    await log('transaction', `Rules re-applied, recategorising ${plural(updated.length, 'transaction')}`);
     await load();
   }
   return updated.length;
@@ -339,15 +489,29 @@ export async function reapplyRules() {
 
 export async function addTransactions(transactions) {
   await db.putMany('transactions', transactions);
+  // One line for the import, not one per row: four hundred entries saying
+  // "added a transaction" is a log nobody reads to the end of.
+  const from = transactions[0]?.sourceFilename;
+  await log(
+    'transaction',
+    `Imported ${plural(transactions.length, 'transaction')}${from ? ` from ${from}` : ''}`,
+  );
   await load();
 }
 
 export async function updateTransaction(transaction) {
+  const before = state.transactions.find((t) => t.id === transaction.id);
   await db.put('transactions', transaction);
+  await log('transaction', describeTransactionEdit(before, transaction));
   await load();
 }
 
 export async function deleteTransaction(id) {
+  const transaction = state.transactions.find((t) => t.id === id);
+  await log(
+    'transaction',
+    `Deleted ${transaction ? `${transaction.date} ${transaction.details}` : 'a transaction'}`,
+  );
   await db.remove('transactions', id);
   await load();
 }
@@ -419,8 +583,22 @@ export function backupPending() {
   return record.signature !== signature;
 }
 
-/** Records that the current state has been written to a file. */
+/**
+ * Records that the current state has been written to a file, and wipes the
+ * change log.
+ *
+ * The log only ever answers "what has changed since the last backup", so once
+ * there *is* a backup its contents are answered. Keeping them would turn a
+ * short actionable list into an archive nobody reads, and the data itself is
+ * already the history.
+ */
 export async function markBackedUp() {
   await db.put('settings', { id: 'backup', at: new Date().toISOString(), signature });
+  for (const entry of state.changeLog) await db.remove('changeLog', entry.id);
   await load();
+}
+
+/** What has been edited since the last backup, newest first. */
+export function changesSinceBackup() {
+  return newestFirst(state.changeLog);
 }

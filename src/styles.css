@@ -1133,6 +1133,61 @@ td.due-soon {
   margin-top: 0;
 }
 
+/* --- change log ---------------------------------------------------------- */
+
+.change-day {
+  max-width: 760px;
+  margin: 0 0 4px;
+}
+
+.change-day h4 {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+.change-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.change-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+}
+
+/* One tint per sort of record, so a column of lines can be skimmed for the
+   kind of change rather than read end to end. */
+.badge-transaction {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.badge-property,
+.badge-details {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.badge-category,
+.badge-rule {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
 /* --- what's new ---------------------------------------------------------- */
 
 .releases {
@@ -1391,6 +1446,60 @@ td.due-soon {
 .swatch.standalone {
   display: inline-block;
   vertical-align: -1px;
+}
+
+/*
+ * The identity icon. One rule tints the whole bank from the record's palette
+ * slot, so changing a colour on Config changes every mark on every screen
+ * without anything being regenerated.
+ */
+.entity-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: var(--entity, var(--muted));
+}
+
+.entity-icon.standalone {
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+/* Picking one. Sized for a comfortable target and showing the icon in the
+   record's own colour, since colour and mark are one decision. */
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.icon-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.icon-option .entity-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-option:hover {
+  border-color: var(--accent);
+}
+
+/* The chosen one is ringed rather than merely tinted — three of the palette
+   slots are too light to carry "selected" on their own. */
+.icon-option.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .swatch-picker {

@@ -1,8 +1,10 @@
 import { BackupFormatError, buildBackup } from '../backup.js';
+import { MAX_ENTRIES, byDay } from '../change-log.js';
 import { download, el, toast, ukDate } from '../dom.js';
 import {
   backupPending,
   backupRecord,
+  changesSinceBackup,
   clearEverything,
   getState,
   markBackedUp,
@@ -13,6 +15,7 @@ export function renderBackup(root, rerender) {
   const { properties, rules, transactions } = getState();
   const last = backupRecord();
   const pending = backupPending();
+  const changes = changesSinceBackup();
 
   const fileInput = el('input', {
     type: 'file',
@@ -85,6 +88,11 @@ export function renderBackup(root, rerender) {
         'Download backup (JSON)',
       ),
     ),
+  );
+
+  renderChangeLog(root, changes);
+
+  root.append(
     el('h3', {}, 'Restore'),
     el('p', { class: 'hint' }, 'Restoring replaces all current data with the contents of the backup file.'),
     fileInput,
@@ -120,5 +128,66 @@ export function renderBackup(root, rerender) {
     } finally {
       fileInput.value = '';
     }
+  }
+}
+
+/**
+ * What has been edited since the last backup.
+ *
+ * The dot on the tab says *that* something changed; this says *what*, so
+ * "should I back up before clearing my browser" becomes a decision made on
+ * evidence rather than on a coloured dot. Grouped by day, because a backup put
+ * off for a fortnight otherwise reads as one undifferentiated column of times.
+ */
+function renderChangeLog(root, changes) {
+  root.append(
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('h3', {}, 'Changes since your last backup'),
+      changes.length > 0 ? el('span', { class: 'count' }, `${changes.length} logged`) : null,
+    ),
+  );
+
+  if (changes.length === 0) {
+    root.append(
+      el('div', { class: 'empty' }, 'Nothing has been edited since your last backup.'),
+    );
+    return;
+  }
+
+  root.append(
+    ...byDay(changes).map(({ day, entries }) =>
+      el(
+        'div',
+        { class: 'change-day' },
+        el('h4', {}, ukDate(day)),
+        el(
+          'ul',
+          { class: 'change-list' },
+          ...entries.map((entry) =>
+            el(
+              'li',
+              {},
+              el('span', { class: 'change-time' }, entry.at.slice(11, 16)),
+              el('span', { class: `badge badge-${entry.kind}` }, entry.kind),
+              ' ',
+              entry.summary,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  if (changes.length >= MAX_ENTRIES) {
+    root.append(
+      el(
+        'p',
+        { class: 'hint' },
+        `Only the most recent ${MAX_ENTRIES} changes are kept — older ones have been dropped. ` +
+          'Backing up more often keeps this list complete.',
+      ),
+    );
   }
 }

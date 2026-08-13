@@ -8,6 +8,7 @@ import { getState, saveTaxSettings, taxSettings } from '../store.js';
 import { estimateTax, summariseForTax } from '../tax.js';
 import { dateRangeControls } from './date-filter.js';
 import { slotClass } from '../palette.js';
+import { propertyMark } from '../icons.js';
 
 /**
  * Range state lives outside render so it survives re-renders, and opens on the
@@ -171,7 +172,7 @@ export function renderSummary(root, rerender) {
           el(
             'tr',
             { class: isNonProperty(property.id) ? 'row-non-property' : '' },
-            el('td', {}, entityTag(property.name, isNonProperty(property.id) ? 'slot-neutral' : slotClass(property), property.name)),
+            el('td', {}, entityTag(property.name, isNonProperty(property.id) ? 'slot-neutral' : slotClass(property), property.name, isNonProperty(property.id) ? null : propertyMark(property))),
             ...categories.map((c) => {
               // Non-property money needs no category, so per-category cells
               // would read as a row of £0.00 that contradicts its own Net.

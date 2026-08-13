@@ -3,7 +3,16 @@ import { CsvFormatError } from '../csv.js';
 import { newId } from '../db.js';
 import { el, entityTag, money, toast, ukDate } from '../dom.js';
 import { buildTransactions, isDuplicate } from '../importer.js';
-import { addTransactions, categoryName, categorySlot, getState, propertyName, propertySlot } from '../store.js';
+import {
+  addTransactions,
+  categoryIcon,
+  categoryName,
+  categorySlot,
+  getState,
+  propertyIcon,
+  propertyName,
+  propertySlot,
+} from '../store.js';
 
 export function renderImport(root, navigate) {
   /** @type {{transaction: import('../types.js').Transaction, duplicate: boolean}[]} */
@@ -141,8 +150,8 @@ export function renderImport(root, navigate) {
                     ),
                   ),
                 )
-              : el('td', {}, entityTag(propertyName(transaction.propertyId), propertySlot(transaction.propertyId))),
-            hasSplit(transaction) ? null : el('td', {}, entityTag(categoryName(transaction.category), categorySlot(transaction.category))),
+              : el('td', {}, entityTag(propertyName(transaction.propertyId), propertySlot(transaction.propertyId), undefined, propertyIcon(transaction.propertyId))),
+            hasSplit(transaction) ? null : el('td', {}, entityTag(categoryName(transaction.category), categorySlot(transaction.category), undefined, categoryIcon(transaction.category))),
             el(
               'td',
               {},

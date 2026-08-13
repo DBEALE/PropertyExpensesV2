@@ -11,11 +11,13 @@ import { DUE_SOON_DAYS, complianceStatus } from '../compliance.js';
 import { addDays, addMonths, taxYearRange } from '../dates.js';
 import { currentTaxYearRange, taxYearLabel, taxYearOf } from '../date-presets.js';
 import { el, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
+import { highlight } from '../focus.js';
 import { sortRows, toggleSort } from '../sort.js';
 import { ANY, filterTransactions } from '../transaction-filter.js';
 import { dateRangeControls } from './date-filter.js';
 import { categoryFilter, transactionTable } from './transaction-table.js';
 import { slotClass } from '../palette.js';
+import { propertyMark } from '../icons.js';
 import {
   SECTIONS,
   currentRecord,
@@ -252,13 +254,20 @@ export function renderProperty(root, rerender, propertyId) {
  * momentarily reflows.
  */
 function renderDetailSections(root, property, propertyDetails, rerender) {
-  root.append(
-    el(
-      'div',
-      { class: 'detail-tiles' },
-      ...SECTIONS.map((section) => renderSection(section, property, propertyDetails, rerender)),
-    ),
+  const tiles = el(
+    'div',
+    { class: 'detail-tiles' },
+    ...SECTIONS.map((section) => renderSection(section, property, propertyDetails, rerender)),
   );
+  root.append(tiles);
+
+  // Arrived here from the Insurance or Tenancy table: say which of the five
+  // tiles the question was about, rather than leaving it to be spotted.
+  if (pendingSection) {
+    const wanted = pendingSection;
+    pendingSection = null;
+    highlight(tiles.querySelector(`[data-section="${wanted}"]`));
+  }
 }
 
 /**
@@ -599,7 +608,16 @@ function renderOverview(root, rerender) {
                 ' ',
                 el(
                   'button',
-                  { class: 'link', onclick: () => openProperty(row.property.id) },
+                  {
+                    class: 'link',
+                    // Straight to the thing that is wrong: a late payment is a
+                    // Recurring payments question, a lapsed certificate a
+                    // Compliance one.
+                    onclick: () =>
+                      openProperty(row.property.id, {
+                        panel: row.overdueStreams.length > 0 ? 'recurring' : 'compliance',
+                      }),
+                  },
                   row.property.name,
                 ),
                 ` — ${reasons.join(', ')}`,
@@ -666,9 +684,11 @@ function renderOverview(root, rerender) {
                 {
                   class: 'link property-drill',
                   title: `Open ${row.property.name}`,
-                  onclick: () => openProperty(row.property.id),
+                  // The top table is about the property as a whole, so it lands
+                  // on the Overview panel.
+                  onclick: () => openProperty(row.property.id, { panel: 'details' }),
                 },
-                entityTag(row.property.name, slotClass(row.property)),
+                entityTag(row.property.name, slotClass(row.property), undefined, propertyMark(row.property)),
               ),
             ),
             el('td', { class: 'num' }, row.value === null ? '—' : money(row.value)),
@@ -771,15 +791,26 @@ function dueCell(date, today, missing = '—') {
   return el('td', { class: state }, ukDate(date), badge);
 }
 
-/** A property name that drills into its page, for the secondary tables. */
-function drillCell(property) {
+/**
+ * A property name that drills into its page, for the secondary tables.
+ *
+ * Each table passes the panel it is about, so clicking a row in the Tenancy
+ * table lands on that property's tenancy rather than wherever you last were.
+ *
+ * @param {{panel?: string, section?: string}} [target]
+ */
+function drillCell(property, target = {}) {
   return el(
     'td',
     {},
     el(
       'button',
-      { class: 'link property-drill', onclick: () => openProperty(property.id) },
-      entityTag(property.name, slotClass(property)),
+      {
+        class: 'link property-drill',
+        title: `Open ${property.name}`,
+        onclick: () => openProperty(property.id, target),
+      },
+      entityTag(property.name, slotClass(property), undefined, propertyMark(property)),
     ),
   );
 }
@@ -838,7 +869,7 @@ function renderInsuranceOverview(root, rerender, properties, details, today) {
           el(
             'tr',
             {},
-            drillCell(row.property),
+            drillCell(row.property, { panel: 'details', section: 'insurance' }),
             el('td', {}, field(row, 'provider') || el('span', { class: 'unset' }, 'not recorded')),
             el('td', {}, field(row, 'coverLevel') || el('span', { class: 'unset' }, '—')),
             el(
@@ -910,7 +941,7 @@ function renderTenancyOverview(root, rerender, properties, details, today) {
           el(
             'tr',
             {},
-            drillCell(row.property),
+            drillCell(row.property, { panel: 'details', section: 'tenancy' }),
             el('td', {}, field(row, 'tenantName') || el('span', { class: 'unset' }, 'none recorded')),
             el(
               'td',
@@ -995,7 +1026,7 @@ function renderComplianceOverview(root, rerender, properties, state, today) {
           el(
             'tr',
             {},
-            drillCell(row.property),
+            drillCell(row.property, { panel: 'compliance' }),
             ...types.map((type) => {
               const status = row.statuses.get(type.id);
               // Not applicable outranks never recorded: the question has been
@@ -1019,11 +1050,31 @@ function renderComplianceOverview(root, rerender, properties, state, today) {
   );
 }
 
-/** Drills into one property, which becomes the tab's remembered place. */
-function openProperty(propertyId) {
+/**
+ * Drills into one property, landing on the panel that holds what you clicked.
+ *
+ * Clicking a property in the Tenancy table and arriving on whichever panel you
+ * happened to leave open last time is a small betrayal: you asked about that
+ * property's *tenancy*. So each table names the panel it is about, and the two
+ * that live inside the Overview panel — insurance and tenancy — also name the
+ * record section, which is then scrolled to and flashed.
+ *
+ * @param {string} propertyId
+ * @param {{panel?: string, section?: string}} [target]
+ */
+function openProperty(propertyId, target = {}) {
   lastViewed = propertyId;
+  if (target.panel && PANELS.some((p) => p.key === target.panel)) openPanel = target.panel;
+  pendingSection = target.section ?? null;
   window.location.hash = `#/properties/${encodeURIComponent(propertyId)}`;
 }
+
+/**
+ * A record section to scroll to and flash once the Overview panel has drawn.
+ * One-shot, like the focus hand-off between screens: coming back to the page
+ * later should not re-flash it.
+ */
+let pendingSection = null;
 
 /**
  * Money in and out per month as stacked columns, by category. It sits inside
@@ -1736,7 +1787,9 @@ function renderSection(section, property, records, rerender) {
 
   return el(
     'section',
-    { class: 'detail-section' },
+    // The key is on the element so a link from the Insurance or Tenancy table
+    // can find its tile without depending on the order they are rendered in.
+    { class: 'detail-section', 'data-section': section.key },
     el(
       'div',
       { class: 'section-head' },

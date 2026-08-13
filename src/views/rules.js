@@ -13,10 +13,12 @@ import {
 } from '../rules.js';
 import {
   categoryName,
+  categoryIcon,
   categorySlot,
   deleteRule,
   getState,
   propertyName,
+  propertyIcon,
   propertySlot,
   reapplyRules,
 } from '../store.js';
@@ -169,12 +171,12 @@ export function renderRules(root, rerender) {
                     el(
                       'div',
                       { class: 'share' },
-                      ...[entityTag(propertyName(a.propertyId), propertySlot(a.propertyId)), ' · ', entityTag(categoryName(a.category), categorySlot(a.category)), ` · ${money(a.amount)}`],
+                      ...[entityTag(propertyName(a.propertyId), propertySlot(a.propertyId), undefined, propertyIcon(a.propertyId)), ' · ', entityTag(categoryName(a.category), categorySlot(a.category), undefined, categoryIcon(a.category)), ` · ${money(a.amount)}`],
                     ),
                   ),
                 )
-              : el('td', {}, entityTag(propertyName(rule.propertyId), propertySlot(rule.propertyId))),
-            hasSplit(rule) ? null : el('td', {}, entityTag(categoryName(rule.category), categorySlot(rule.category))),
+              : el('td', {}, entityTag(propertyName(rule.propertyId), propertySlot(rule.propertyId), undefined, propertyIcon(rule.propertyId))),
+            hasSplit(rule) ? null : el('td', {}, entityTag(categoryName(rule.category), categorySlot(rule.category), undefined, categoryIcon(rule.category))),
             el(
               'td',
               { class: 'num' },
