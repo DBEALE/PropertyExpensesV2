@@ -10,9 +10,11 @@
  *
  * Three grades, because they are three different kinds of fact:
  *
- *   - **overdue** — a date that has already passed. Red.
- *   - **soon** — a certificate falling due inside 30 days. Yellow: still time
- *     to book an engineer, but not much.
+ *   - **overdue** — a date that has already passed: a payment that never
+ *     arrived, a lapsed certificate, insurance cover that has run out. Red.
+ *   - **soon** — a certificate or an insurance policy falling due inside 30
+ *     days. Yellow: still time to book an engineer or ring a broker, but not
+ *     much.
  *   - **missing** — a section with nothing recorded. A prompt, not a deadline,
  *     and deliberately *not* counted in the badge: a property whose insurance
  *     you have chosen not to record would otherwise carry a permanent number,
@@ -22,6 +24,7 @@
  */
 import { isOverdue, paymentStreams, sharesFor } from './accounts.js';
 import { upcomingCompliance } from './compliance.js';
+import { addMonths } from './dates.js';
 import { currentRecord, missingSections, upcomingDates } from './property-details.js';
 
 /**
@@ -73,16 +76,46 @@ export function attentionFor(state, propertyId, today, horizonDays = 90) {
 
   const overdueCompliance = compliance.filter((c) => c.overdue);
   const soonCompliance = compliance.filter((c) => c.dueSoon);
+  const overdueDates = dated.filter((d) => d.overdue);
+  const soonDates = dated.filter((d) => d.dueSoon);
+
+  /**
+   * Everything already past, merged and dated by when it went wrong. A stream
+   * has no date of its own — it failed the month after it last arrived — so
+   * that is what it is sorted and reported by.
+   */
+  const overdue = [
+    ...lateStreams.map((stream) => ({
+      kind: 'payment',
+      label: `${stream.label} not received`,
+      since: addMonths(stream.lastDate, 1),
+    })),
+    ...overdueCompliance.map((item) => ({ kind: 'compliance', label: item.label, since: item.date })),
+    ...overdueDates.map((item) => ({ kind: item.section, label: item.label, since: item.date })),
+  ].sort((a, b) => a.since.localeCompare(b.since));
+
+  /** Not yet a fault, but close enough to act on today. */
+  const soon = [
+    ...soonCompliance.map((item) => ({ kind: 'compliance', label: item.label, date: item.date })),
+    ...soonDates.map((item) => ({ kind: item.section, label: item.label, date: item.date })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
   return {
     lateStreams,
     overdueCompliance,
     soonCompliance,
+    overdueDates,
+    soonDates,
+    overdue,
+    soon,
     /** Approaching, but far enough off to be information rather than a warning. */
-    upcoming: [...compliance.filter((c) => !c.overdue && !c.dueSoon), ...dated.map((d) => ({ ...d, overdue: false }))],
+    upcoming: [
+      ...compliance.filter((c) => !c.overdue && !c.dueSoon),
+      ...dated.filter((d) => !d.overdue && !d.dueSoon),
+    ],
     missing,
-    overdueCount: lateStreams.length + overdueCompliance.length,
-    soonCount: soonCompliance.length,
+    overdueCount: overdue.length,
+    soonCount: soon.length,
     /**
      * The number on the badge. Deadlines only — see the note at the top of
      * this file for why missing sections are left out of it.

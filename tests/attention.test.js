@@ -10,7 +10,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { attentionFor, attentionTotal } from '../src/attention.js';
-import { DUE_SOON_DAYS, complianceStatus, isExempt } from '../src/compliance.js';
+import { complianceStatus, isExempt } from '../src/compliance.js';
+import { DUE_SOON_DAYS } from '../src/dates.js';
 import { SECTIONS, isOwnedOutright, missingSections } from '../src/property-details.js';
 
 const TODAY = '2026-08-12';
@@ -109,6 +110,89 @@ describe('attentionFor: the three grades', () => {
     // Completed 2025-09-11 → due 2026-09-11, which is 30 days after TODAY.
     assert.equal(dueOn('2025-09-11').soonCount, 1, 'exactly 30 days away is inside the window');
     assert.equal(dueOn('2025-09-12').soonCount, 0, '31 days away is not');
+  });
+});
+
+describe('insurance cover', () => {
+  const withRenewal = (renewalDate) =>
+    attentionFor(
+      state({
+        propertyDetails: [
+          ...ALL_SECTIONS.filter((d) => d.section !== 'insurance'),
+          detail('insurance', { provider: 'Direct Line', renewalDate }),
+        ],
+      }),
+      'p1',
+      TODAY,
+    );
+
+  it('is overdue once the renewal date has gone by', () => {
+    const a = withRenewal('2026-07-01');
+    assert.equal(a.overdueDates.length, 1);
+    assert.equal(a.overdue[0].label, 'Insurance cover lapsed');
+    assert.equal(a.overdue[0].kind, 'insurance');
+    assert.equal(a.count, 1);
+  });
+
+  it('stays on the list however long ago it lapsed', () => {
+    // An uninsured house does not stop being uninsured because the renewal
+    // date fell outside a 90-day window.
+    const a = withRenewal('2024-01-01');
+    assert.equal(a.overdueDates.length, 1);
+    assert.equal(a.count, 1);
+  });
+
+  it('warns inside the 30-day window without calling it overdue', () => {
+    const a = withRenewal('2026-09-05');
+    assert.equal(a.overdueDates.length, 0);
+    assert.equal(a.soonDates.length, 1);
+    assert.equal(a.soon[0].label, 'Insurance cover expires');
+    assert.equal(a.count, 1);
+  });
+
+  it('puts the boundary exactly where DUE_SOON_DAYS says', () => {
+    assert.equal(withRenewal('2026-09-11').soonCount, 1, '30 days away is inside the window');
+    assert.equal(withRenewal('2026-09-12').soonCount, 0, '31 days away is not');
+  });
+
+  it('is only information further out, and not counted', () => {
+    const a = withRenewal('2026-10-20');
+    assert.equal(a.count, 0);
+    assert.equal(a.upcoming.some((u) => u.section === 'insurance'), true);
+  });
+
+  it('says nothing when no renewal date has been recorded', () => {
+    const a = attentionFor(state(), 'p1', TODAY);
+    assert.equal(a.overdueDates.length, 0);
+    assert.equal(a.soonDates.length, 0);
+  });
+});
+
+describe('dates that are events rather than exposure', () => {
+  const withTenancyEnd = (endDate, today) =>
+    attentionFor(
+      state({
+        propertyDetails: [
+          ...ALL_SECTIONS.filter((d) => d.section !== 'tenancy'),
+          detail('tenancy', { tenantName: 'S Agyapong', endDate }),
+        ],
+      }),
+      'p1',
+      today,
+    );
+
+  it('does not chase a tenancy end date that has passed', () => {
+    // The tenancy ending is a thing that happened; the property is no worse
+    // off for it, so it drops off rather than sitting there in red forever.
+    const a = withTenancyEnd('2026-06-01', TODAY);
+    assert.equal(a.overdueDates.length, 0);
+    assert.equal(a.count, 0);
+  });
+
+  it('still lists one that is coming up', () => {
+    const a = withTenancyEnd('2026-09-30', TODAY);
+    assert.equal(a.count, 0, 'approaching, but not a fault to act on');
+    assert.equal(a.upcoming.some((u) => u.section === 'tenancy'), true);
   });
 });
 

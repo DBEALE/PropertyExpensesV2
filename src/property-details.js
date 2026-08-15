@@ -1,4 +1,4 @@
-import { addDays } from './dates.js';
+import { DUE_SOON_DAYS, addDays } from './dates.js';
 
 /**
  * Everything recorded about a property beyond its name — address, insurance,
@@ -238,30 +238,66 @@ function toNumber(value) {
 export { toNumber as parseAmountField };
 
 /**
+ * The dated fields worth watching, and how each one reads once it passes.
+ *
+ * `lapses` marks the ones where the date passing leaves the property *exposed*
+ * rather than merely marking an event. An insurance renewal that has gone by
+ * means an uninsured house — that is a fault to be chased, and it stays on the
+ * list however long ago it happened. A fixed rate ending or a tenancy reaching
+ * its end date is a thing that has happened; the property is no worse off for
+ * it, so those simply drop off the list once they are behind you.
+ */
+const WATCHED_DATES = [
+  { section: 'mortgage', field: 'fixEndDate', label: 'Fixed rate ends' },
+  { section: 'mortgage', field: 'termEnds', label: 'Mortgage term ends' },
+  {
+    section: 'insurance',
+    field: 'renewalDate',
+    label: 'Insurance renewal',
+    lapses: true,
+    lapsedLabel: 'Insurance cover lapsed',
+    soonLabel: 'Insurance cover expires',
+  },
+  { section: 'tenancy', field: 'endDate', label: 'Tenancy ends' },
+];
+
+/**
  * Dates worth warning about: a fixed rate about to end, a tenancy ending, an
- * insurance renewal. Returned soonest first.
+ * insurance renewal. Returned soonest first, graded the same way compliance is
+ * so the two can be merged into one attention list.
  *
  * @param {object[]} records all detail records
  * @param {string} propertyId
  * @param {string} today ISO date
- * @param {number} [withinDays]
+ * @param {number} [withinDays] how far ahead to look
+ * @param {number} [soonDays] inside which an approaching date is a warning
+ * @returns {{label: string, date: string, section: string, overdue: boolean, dueSoon: boolean}[]}
  */
-export function upcomingDates(records, propertyId, today, withinDays = 90) {
-  const watch = [
-    { section: 'mortgage', field: 'fixEndDate', label: 'Fixed rate ends' },
-    { section: 'mortgage', field: 'termEnds', label: 'Mortgage term ends' },
-    { section: 'insurance', field: 'renewalDate', label: 'Insurance renewal' },
-    { section: 'tenancy', field: 'endDate', label: 'Tenancy ends' },
-  ];
-
+export function upcomingDates(records, propertyId, today, withinDays = 90, soonDays = DUE_SOON_DAYS) {
   const limit = addDays(today, withinDays);
-  return watch
-    .map(({ section, field, label }) => {
-      const record = currentRecord(records, propertyId, section);
-      const date = record?.data?.[field];
-      return date ? { label, date, section } : null;
-    })
-    .filter((item) => item && item.date >= today && item.date <= limit)
+  const soonLimit = addDays(today, soonDays);
+
+  return WATCHED_DATES.map(({ section, field, label, lapses, lapsedLabel, soonLabel }) => {
+    const record = currentRecord(records, propertyId, section);
+    const date = record?.data?.[field];
+    if (!date) return null;
+
+    const overdue = Boolean(lapses) && date < today;
+    const dueSoon = Boolean(lapses) && date >= today && date <= soonLimit;
+    return {
+      // Named for the state it is in: "Insurance renewal — 12/09/2026" is a
+      // diary entry, "Insurance cover lapsed" is the problem it becomes.
+      label: (overdue && lapsedLabel) || (dueSoon && soonLabel) || label,
+      date,
+      section,
+      overdue,
+      dueSoon,
+    };
+  })
+    .filter(Boolean)
+    // Something lapsed stays visible however long ago, exactly as an overdue
+    // certificate does; anything else drops out once it is behind you.
+    .filter((item) => item.overdue || (item.date >= today && item.date <= limit))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 

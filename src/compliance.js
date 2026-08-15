@@ -15,7 +15,7 @@
  *
  * Pure functions; no DOM, no storage.
  */
-import { addDays, addMonths } from './dates.js';
+import { DUE_SOON_DAYS, addDays, addMonths } from './dates.js';
 
 /**
  * Seeded on first load, then editable — the same pattern as categories. Ids
@@ -102,13 +102,6 @@ export function completionHistory(completions, propertyId, complianceTypeId) {
     .filter((c) => c.propertyId === propertyId && c.complianceTypeId === complianceTypeId)
     .sort((a, b) => b.completedDate.localeCompare(a.completedDate));
 }
-
-/**
- * How close a certificate is to being a problem. A single vocabulary, so the
- * banner, the table and the tab badge cannot disagree about what "due soon"
- * means.
- */
-export const DUE_SOON_DAYS = 30;
 
 /** The id of the exemption record for one property and one type. */
 export function exemptionId(propertyId, complianceTypeId) {

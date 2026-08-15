@@ -7,8 +7,8 @@ import { accountSummary, monthlyTotals, paymentStreams, sharesFor, streamState }
 import { sumAllocations } from '../allocation.js';
 import { attentionFor, tenancyStart } from '../attention.js';
 import { capSeries, legend, stackedColumns } from '../charts.js';
-import { DUE_SOON_DAYS, complianceStatus } from '../compliance.js';
-import { addDays, addMonths, taxYearRange } from '../dates.js';
+import { complianceStatus } from '../compliance.js';
+import { DUE_SOON_DAYS, addDays, addMonths, taxYearRange } from '../dates.js';
 import { currentTaxYearRange, taxYearLabel, taxYearOf } from '../date-presets.js';
 import { el, entityMark, entityTag, money, sortableTh, toast, ukDate } from '../dom.js';
 import { highlight } from '../focus.js';
@@ -534,7 +534,7 @@ function renderOverview(root, rerender) {
     // can never disagree about how much this property wants doing.
     const attention = attentionFor(state, property.id, today, 90);
     // One list of everything approaching, so "next due" is the true next thing.
-    const upcoming = [...attention.soonCompliance, ...attention.upcoming].sort((a, b) =>
+    const upcoming = [...attention.soon, ...attention.upcoming].sort((a, b) =>
       a.date.localeCompare(b.date),
     );
     const outright = isTrue(mortgage?.data?.ownedOutright);
@@ -550,6 +550,8 @@ function renderOverview(root, rerender) {
       net: accountSummary(shares.filter(inTaxYear)).net,
       attention: attention.count,
       overdueStreams: attention.lateStreams,
+      overdue: attention.overdue,
+      soon: attention.soon,
       soonCount: attention.soonCount,
       next: upcoming[0] ?? null,
     };
@@ -586,16 +588,14 @@ function renderOverview(root, rerender) {
             {},
             ...needingAttention.map((row) => {
               // The badge takes the colour of the worst thing on the row, and
-              // the text says which — "compliance overdue" on a property whose
-              // only issue is a certificate due next month would be a lie.
+              // the text names the things themselves. It used to say
+              // "compliance overdue" for anything that was not a late payment,
+              // which became a lie the moment insurance could lapse too.
               const overdueCount = row.attention - row.soonCount;
               const reasons = [
-                row.overdueStreams.length > 0
-                  ? `${row.overdueStreams.map((s) => s.label).join(', ')} not received`
-                  : null,
-                overdueCount - row.overdueStreams.length > 0 ? 'compliance overdue' : null,
-                row.soonCount > 0 ? `${row.soonCount} due within ${DUE_SOON_DAYS} days` : null,
-              ].filter(Boolean);
+                ...row.overdue.map((item) => item.label),
+                ...row.soon.map((item) => `${item.label} within ${DUE_SOON_DAYS} days`),
+              ];
 
               return el(
                 'li',
@@ -610,13 +610,7 @@ function renderOverview(root, rerender) {
                   'button',
                   {
                     class: 'link',
-                    // Straight to the thing that is wrong: a late payment is a
-                    // Recurring payments question, a lapsed certificate a
-                    // Compliance one.
-                    onclick: () =>
-                      openProperty(row.property.id, {
-                        panel: row.overdueStreams.length > 0 ? 'recurring' : 'compliance',
-                      }),
+                    onclick: () => openProperty(row.property.id, panelFor(row.overdue[0] ?? row.soon[0])),
                   },
                   row.property.name,
                 ),
@@ -789,6 +783,24 @@ function dueCell(date, today, missing = '—') {
         ? el('span', { class: 'badge badge-soon' }, 'Due soon')
         : null;
   return el('td', { class: state }, ukDate(date), badge);
+}
+
+/**
+ * Where to land someone who clicked a property because something is wrong with
+ * it: the panel that holds the thing itself.
+ *
+ * A late payment is a Recurring payments question and a lapsed certificate a
+ * Compliance one; anything coming from a dated record — insurance cover run
+ * out, a tenancy ending — lives in the Overview panel, so that is where it
+ * goes, with the tile scrolled to.
+ *
+ * @param {{kind: string}|undefined} item the worst thing on that property
+ */
+function panelFor(item) {
+  if (!item) return { panel: 'details' };
+  if (item.kind === 'payment') return { panel: 'recurring' };
+  if (item.kind === 'compliance') return { panel: 'compliance' };
+  return { panel: 'details', section: item.kind };
 }
 
 /**
@@ -1205,19 +1217,10 @@ function renderTransactionList(root, rerender, transactions, property) {
  * @param {() => void} openDetails takes the reader to the records to fill in
  */
 function renderComingUp(root, attention, today, openDetails) {
-  const overdue = [
-    ...attention.lateStreams.map((stream) => ({
-      label: `${stream.label} not received`,
-      // A stream's own "due" date is the month after it last arrived, which is
-      // the date it actually failed to turn up.
-      since: addMonths(stream.lastDate, 1),
-    })),
-    ...attention.overdueCompliance.map((item) => ({ label: item.label, since: item.date })),
-  ].sort((a, b) => a.since.localeCompare(b.since));
-
-  const soon = [...attention.soonCompliance].sort((a, b) => a.date.localeCompare(b.date));
+  // Merged and sorted in attention.js, so this list and the badge on the tab
+  // are the same list counted twice rather than two lists built twice.
+  const { overdue, soon, missing } = attention;
   const upcoming = [...attention.upcoming].sort((a, b) => a.date.localeCompare(b.date));
-  const missing = attention.missing;
 
   if (overdue.length + soon.length + upcoming.length + missing.length === 0) return;
 

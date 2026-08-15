@@ -20,6 +20,23 @@
 export const RELEASES = [
   {
     date: '2026-08-15',
+    title: 'Insurance that has run out now says so',
+    points: [
+      'A property whose insurance renewal date has passed shows **Insurance cover lapsed** in ' +
+        'Needs attention, in red, and counts towards the Properties tab badge. It stays there ' +
+        'however long ago it went: an uninsured house does not stop being uninsured because the ' +
+        'date fell outside a 90-day window.',
+      'One renewing within 30 days shows **Insurance cover expires** as a yellow warning, the same ' +
+        'grade a certificate falling due gets.',
+      'Clicking such a property from the portfolio list opens its Overview panel with the Insurance ' +
+        'tile scrolled to.',
+      'Dates that are events rather than exposure — a fixed rate ending, a tenancy reaching its end ' +
+        'date — still drop quietly off the list once they are behind you. Nothing is at risk ' +
+        'because they passed.',
+    ],
+  },
+  {
+    date: '2026-08-15',
     title: 'The app has a face',
     points: [
       'A red house in the browser tab, drawn from the same icon bank the properties use. It takes ' +

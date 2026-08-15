@@ -140,15 +140,29 @@ a warning gets ignored:
 
 | Grade | What it means | How it reads |
 | --- | --- | --- |
-| **Needs attention** | a date that has already passed | red `Overdue` badge — "Gas Safety — due 14/06/2026, 59 days ago" |
-| **Due within 30 days** | a certificate about to lapse | yellow `Due soon` badge — "Gas Safety — 01/09/2026, in 20 days" |
+| **Needs attention** | a payment that never arrived, or a date that has passed and left the property exposed | red `Overdue` badge — "Gas Safety — due 14/06/2026, 59 days ago", "Insurance cover lapsed — due 01/07/2026, 45 days ago" |
+| **Due within 30 days** | a certificate or a policy about to lapse | yellow `Due soon` badge — "Insurance cover expires — 26/08/2026, in 11 days" |
 | **Coming up** | anything else falling due inside 90 days | plain text — "Tenancy ends — 30/09/2026" |
 | **Still to add** | a record section with nothing in it | a prompt with a link to the Overview panel |
 
 The 30-day grade is the one worth explaining: 28 days to book a gas engineer is a different kind of
 fact from 80 days, and the old banner put both in the same list. The boundary is one constant
-(`DUE_SOON_DAYS`) shared by the banner, the compliance table, the portfolio overview and the tab
-badge, so "due soon" means one thing everywhere.
+(`DUE_SOON_DAYS`, in `dates.js` since two domains now watch it) shared by the banner, the compliance
+table, the portfolio overview and the tab badge, so "due soon" means one thing everywhere.
+
+#### What counts as passing, and what counts as lapsing
+
+Not every date going by is a problem, so `WATCHED_DATES` in `property-details.js` marks the ones
+that leave the property **exposed** rather than merely marking an event:
+
+- **Insurance renewal** lapses. Past that date the house is uninsured, which is a fault to chase, so
+  it turns red, counts on the badge, and **stays on the list however long ago it went** — exactly as
+  an overdue certificate does. A renewal inside 30 days is the yellow warning instead. Each state
+  renames the item: "Insurance renewal" is a diary entry, "Insurance cover lapsed" is the problem it
+  became.
+- **A fixed rate ending** or **a tenancy reaching its end date** does not. The property is no worse
+  off for it, so those simply drop off the list once they are behind you rather than sitting there
+  in red forever.
 
 **Still to add** is a prompt, not a deadline, and is deliberately **not counted** in the tab badge.
 A property whose insurance you have chosen not to record would otherwise carry a number that can
@@ -616,7 +630,7 @@ them. Two details worth knowing:
   | the Insurance table | Overview, with the Insurance tile scrolled to and flashed |
   | the Tenancies table | Overview, with the Tenancy tile scrolled to and flashed |
   | the Compliance table | Compliance |
-  | the Needs attention list | whatever is wrong — Recurring payments for a late payment, Compliance for a lapsed certificate |
+  | the Needs attention list | whatever is wrong — Recurring payments for a late payment, Compliance for a lapsed certificate, Overview with the Insurance tile flashed for cover that has run out |
 
   Clicking a property in the Tenancies table and arriving somewhere else is a small betrayal: you
   asked about that property's *tenancy*. The section flash uses the same one-shot hand-off as the
@@ -810,7 +824,7 @@ src/
   palette.js          the eight identity colour slots
   icons.js            the property and category icon banks
   accounts.js         monthly totals and recurring-payment detection
-  property-details.js dated property records, LTV, upcoming dates, missing sections
+  property-details.js dated property records, LTV, watched dates, missing sections
   compliance.js       inspection schedule: next due, overdue, due soon, not applicable
   attention.js        one tally of what a property wants, shared by badge/banner/table
   whats-new.js        the changelog the app shows about itself
@@ -829,7 +843,7 @@ src/
   store.js            in-memory state over IndexedDB, plus the backup-pending digest
   db.js               IndexedDB wrapper
   backup.js           backup build and validation
-  dates.js            tax year and date range helpers
+  dates.js            tax year, date range helpers, and the due-soon window
   types.js            fixed categories and JSDoc typedefs
   dom.js              element builder and formatting helpers
   styles.css

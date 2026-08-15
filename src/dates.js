@@ -1,4 +1,15 @@
 /**
+ * How close a date has to be before it stops being information and becomes a
+ * warning.
+ *
+ * One constant for the whole app — compliance certificates, insurance cover,
+ * the banner, the tables, the tab badge — so "due soon" means one thing
+ * wherever it is said. It lives here rather than with either of the things
+ * that watch dates, because it belongs to neither.
+ */
+export const DUE_SOON_DAYS = 30;
+
+/**
  * A UK tax year runs 6 April to 5 April. `startYear` 2026 means 2026/27.
  * @param {number} startYear
  */

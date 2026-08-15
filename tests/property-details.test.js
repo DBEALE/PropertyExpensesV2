@@ -200,13 +200,45 @@ describe('upcomingDates', () => {
     const due = upcomingDates(records, 'p1', '2026-08-01', 90);
     assert.deepEqual(
       due.map((d) => d.label),
-      ['Insurance renewal', 'Fixed rate ends'],
+      // Insurance is 14 days off, so it is named for the state it is in.
+      ['Insurance cover expires', 'Fixed rate ends'],
     );
   });
 
-  it('ignores dates beyond the window and dates already past', () => {
+  it('ignores dates beyond the window', () => {
     assert.deepEqual(upcomingDates(records, 'p1', '2026-08-01', 5), []);
-    assert.deepEqual(upcomingDates(records, 'p1', '2026-10-01', 90), []);
+  });
+
+  it('grades an approaching insurance renewal as a warning', () => {
+    const [insurance] = upcomingDates(records, 'p1', '2026-08-01', 90);
+    assert.equal(insurance.dueSoon, true);
+    assert.equal(insurance.overdue, false);
+    // Two months out it is a diary entry again, under its plain name.
+    const [ahead] = upcomingDates(records, 'p1', '2026-06-01', 90);
+    assert.equal(ahead.label, 'Insurance renewal');
+    assert.equal(ahead.dueSoon, false);
+  });
+
+  it('keeps lapsed insurance on the list however long ago it went', () => {
+    // An uninsured house is a fault to chase, not an event that has passed, so
+    // unlike the others it does not drop off once the date is behind you.
+    const lapsed = upcomingDates(records, 'p1', '2027-02-01', 90);
+    assert.deepEqual(
+      lapsed.map((d) => d.label),
+      ['Insurance cover lapsed'],
+    );
+    assert.equal(lapsed[0].overdue, true);
+    assert.equal(lapsed[0].date, '2026-08-15');
+  });
+
+  it('drops the dates that are merely events once they are past', () => {
+    // The fixed rate ended and the tenancy ends later; neither leaves the
+    // property exposed, so from 2028 only nothing is left.
+    const after = upcomingDates(records, 'p1', '2028-01-01', 90);
+    assert.deepEqual(
+      after.map((d) => d.label),
+      ['Insurance cover lapsed'],
+    );
   });
 
   it('reads the version in force, not a superseded one', () => {
