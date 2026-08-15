@@ -36,8 +36,9 @@ third-party service.
   against browser storage being cleared. The tab carries a dot whenever anything has changed since
   your last download.
 - **Property status** — each property's page flags what needs doing: recurring payments that have
-  stopped arriving, compliance certificates (gas safety, EICR, PAT, legionella) overdue or due
-  within 30 days, and records you have not filled in yet. The count sits on the Properties tab.
+  stopped arriving, compliance certificates and insurance cover overdue or due within 30 days,
+  records that are incomplete or out of date, and sections you have not filled in yet. The count
+  sits on the Properties tab.
 - **What's new** — a changelog of the app itself, at the far right of the tab row.
 - **Colour and icon identity** — every property and category carries a colour and an icon, chosen on
   Config and used consistently on every screen.
@@ -142,6 +143,7 @@ a warning gets ignored:
 | --- | --- | --- |
 | **Needs attention** | a payment that never arrived, or a date that has passed and left the property exposed | red `Overdue` badge — "Gas Safety — due 14/06/2026, 59 days ago", "Insurance cover lapsed — due 01/07/2026, 45 days ago" |
 | **Due within 30 days** | a certificate or a policy about to lapse | yellow `Due soon` badge — "Insurance cover expires — 26/08/2026, in 11 days" |
+| **Records to check** | a record you have kept that is incomplete or out of date | grey `Check` badge, linking to the record — "Valuation is 26 months old", "Deposit is not recorded as protected in a scheme" |
 | **Coming up** | anything else falling due inside 90 days | plain text — "Tenancy ends — 30/09/2026" |
 | **Still to add** | a record section with nothing in it | a prompt with a link to the Overview panel |
 
@@ -163,6 +165,36 @@ that leave the property **exposed** rather than merely marking an event:
 - **A fixed rate ending** or **a tenancy reaching its end date** does not. The property is no worse
   off for it, so those simply drop off the list once they are behind you rather than sitting there
   in red forever.
+
+#### Records that don't say enough
+
+`recordGaps` in `record-gaps.js` asks the harder question behind "Still to add": given that you
+*have* recorded a valuation, is it still worth anything? Given that you have recorded a tenancy,
+does it say what the deposit was?
+
+| Check | Why it is on the list |
+| --- | --- |
+| Valuation more than **12 months** old | every figure derived from it is that old too; it says how old |
+| Valuation with no market value | LTV and equity cannot be worked out |
+| Mortgage with no outstanding balance | the same, unless the property is marked owned outright |
+| Insurance with no renewal date | expiry is tracked from it, so without one nothing above can fire |
+| Tenancy with no deposit | — |
+| Deposit recorded but no scheme | a deposit not protected within 30 days is a penalty of one to three times the deposit — the costliest blank in the app |
+| Tenancy with no rent | a missed payment cannot be spotted against nothing |
+| Tenancy with no start date | it is what retires a former tenant's rent, so a departed tenant is otherwise chased for arrears |
+
+Two rules keep it short enough to act on:
+
+- **A check only fires on a record you chose to keep.** No valuation recorded means no
+  stale-valuation warning — that absence is the "Still to add" prompt's business, and counting it in
+  both places would report one gap as two. So nothing here is unavoidable noise.
+- **Every check names something that stops the app doing its job, or that carries real-world risk.**
+  A missing broker, county or policy number is nobody's problem, and putting every blank field on
+  the list would bury the deposit that is not protected.
+
+These **are** counted on the tab badge, unlike whole missing sections. Each one is cleared by
+entering a figure, and each one is on a record you have already decided you care about — so the
+number can always reach zero, which is the test the badge has to pass.
 
 **Still to add** is a prompt, not a deadline, and is deliberately **not counted** in the tab badge.
 A property whose insurance you have chosen not to record would otherwise carry a number that can
@@ -827,6 +859,7 @@ src/
   property-details.js dated property records, LTV, watched dates, missing sections
   compliance.js       inspection schedule: next due, overdue, due soon, not applicable
   attention.js        one tally of what a property wants, shared by badge/banner/table
+  record-gaps.js      records kept but incomplete: stale valuation, unprotected deposit
   whats-new.js        the changelog the app shows about itself
   change-log.js       what has been edited since the last backup
   focus.js            "take me to that row" hand-off between screens

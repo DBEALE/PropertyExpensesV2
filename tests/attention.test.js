@@ -28,8 +28,34 @@ function detail(section, data = { note: 'x' }) {
   return { id: `d-${section}`, propertyId: 'p1', section, effectiveFrom: '2025-01-01', data };
 }
 
-/** Every section recorded, so `missing` is empty unless a test says otherwise. */
-const ALL_SECTIONS = SECTIONS.map((s) => detail(s.key));
+/**
+ * A property with nothing wrong with it: every section recorded, and every
+ * field that `recordGaps` looks at filled in. Tests then override the one
+ * record they are about, so a fixture that happened to be short of a deposit
+ * cannot quietly add to the count a test is asserting.
+ */
+const COMPLETE = {
+  address: { line1: '1 Test Street', postcode: 'TE5 7ST' },
+  // Far enough out to be neither a warning nor even "coming up".
+  insurance: { provider: 'Direct Line', renewalDate: '2027-06-01' },
+  mortgage: { lender: 'NatWest', amount: '120000' },
+  valuation: { value: '200000', valuedOn: '2026-01-15' },
+  tenancy: {
+    tenantName: 'S Agyapong',
+    startDate: '2025-01-01',
+    rentAmount: '1000',
+    depositAmount: '1200',
+    depositScheme: 'DPS',
+  },
+};
+
+const ALL_SECTIONS = SECTIONS.map((s) => detail(s.key, COMPLETE[s.key]));
+
+/** The complete property with one section replaced. */
+const withSection = (section, data) => [
+  ...ALL_SECTIONS.filter((d) => d.section !== section),
+  detail(section, data),
+];
 
 function state(overrides = {}) {
   return {
@@ -116,12 +142,7 @@ describe('attentionFor: the three grades', () => {
 describe('insurance cover', () => {
   const withRenewal = (renewalDate) =>
     attentionFor(
-      state({
-        propertyDetails: [
-          ...ALL_SECTIONS.filter((d) => d.section !== 'insurance'),
-          detail('insurance', { provider: 'Direct Line', renewalDate }),
-        ],
-      }),
+      state({ propertyDetails: withSection('insurance', { provider: 'Direct Line', renewalDate }) }),
       'p1',
       TODAY,
     );
@@ -172,10 +193,7 @@ describe('dates that are events rather than exposure', () => {
   const withTenancyEnd = (endDate, today) =>
     attentionFor(
       state({
-        propertyDetails: [
-          ...ALL_SECTIONS.filter((d) => d.section !== 'tenancy'),
-          detail('tenancy', { tenantName: 'S Agyapong', endDate }),
-        ],
+        propertyDetails: withSection('tenancy', { ...COMPLETE.tenancy, endDate }),
       }),
       'p1',
       today,
@@ -193,6 +211,58 @@ describe('dates that are events rather than exposure', () => {
     const a = withTenancyEnd('2026-09-30', TODAY);
     assert.equal(a.count, 0, 'approaching, but not a fault to act on');
     assert.equal(a.upcoming.some((u) => u.section === 'tenancy'), true);
+  });
+});
+
+describe('records that do not say enough', () => {
+  it('counts a stale valuation, and says how old it is', () => {
+    const a = attentionFor(
+      state({ propertyDetails: withSection('valuation', { value: '200000', valuedOn: '2024-06-01' }) }),
+      'p1',
+      TODAY,
+    );
+    assert.equal(a.gapCount, 1);
+    assert.equal(a.count, 1, 'it is cleared by revaluing, so it earns a place on the badge');
+    assert.match(a.gaps[0].label, /months old/);
+    assert.equal(a.gaps[0].section, 'valuation');
+  });
+
+  it('counts a tenancy with no deposit', () => {
+    const { depositAmount, depositScheme, ...noDeposit } = COMPLETE.tenancy;
+    const a = attentionFor(state({ propertyDetails: withSection('tenancy', noDeposit) }), 'p1', TODAY);
+    assert.deepEqual(
+      a.gaps.map((g) => g.id),
+      ['tenancy-deposit'],
+    );
+    assert.equal(a.count, 1);
+  });
+
+  it('keeps gaps apart from dates, so a warning is never mistaken for a lapse', () => {
+    const a = attentionFor(
+      state({ propertyDetails: withSection('valuation', { value: '1', valuedOn: '2020-01-01' }) }),
+      'p1',
+      TODAY,
+    );
+    assert.equal(a.overdue.length, 0, 'nothing has actually gone wrong');
+    assert.equal(a.soon.length, 0);
+    assert.equal(a.gapCount, 1);
+  });
+
+  it('says nothing about a property whose records are complete', () => {
+    assert.equal(attentionFor(state(), 'p1', TODAY).gapCount, 0);
+  });
+
+  it('says nothing about a section that has never been recorded', () => {
+    // That absence is the "Still to add" prompt's, and counting it here as
+    // well would report one missing tenancy as two things to do.
+    const a = attentionFor(
+      state({ propertyDetails: ALL_SECTIONS.filter((d) => d.section !== 'tenancy') }),
+      'p1',
+      TODAY,
+    );
+    assert.equal(a.gapCount, 0);
+    assert.ok(a.missing.some((m) => m.label === 'Tenancy'));
+    assert.equal(a.count, 0, 'a whole missing section is still a prompt, not a count');
   });
 });
 
@@ -269,7 +339,13 @@ describe('attentionTotal', () => {
         ],
         propertyDetails: [
           ...ALL_SECTIONS,
-          ...SECTIONS.map((s) => ({ ...detail(s.key), id: `p2-${s.key}`, propertyId: 'p2' })),
+          // The second property is complete too, so the only thing either has
+          // outstanding is the lapsed certificate below.
+          ...SECTIONS.map((s) => ({
+            ...detail(s.key, COMPLETE[s.key]),
+            id: `p2-${s.key}`,
+            propertyId: 'p2',
+          })),
         ],
         complianceCompletions: [
           { id: 'c1', propertyId: 'p1', complianceTypeId: 'gas', completedDate: '2020-01-01' },

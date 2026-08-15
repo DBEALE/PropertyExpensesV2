@@ -201,10 +201,12 @@ export function renderProperty(root, rerender, propertyId) {
   const streams = paymentStreams(sharesFor(transactions, propertyId), today).filter((s) => s.recurring);
   const attention = attentionFor(state, propertyId, today, 90);
 
-  renderComingUp(root, attention, today, () => {
+  const openDetails = (section = null) => {
     openPanel = 'details';
+    pendingSection = section;
     rerender();
-  });
+  };
+  renderComingUp(root, attention, today, () => openDetails(), openDetails);
 
   const shares = sharesFor(transactions, propertyId);
   const { categories } = getState();
@@ -552,6 +554,7 @@ function renderOverview(root, rerender) {
       overdueStreams: attention.lateStreams,
       overdue: attention.overdue,
       soon: attention.soon,
+      gaps: attention.gaps,
       soonCount: attention.soonCount,
       next: upcoming[0] ?? null,
     };
@@ -574,7 +577,7 @@ function renderOverview(root, rerender) {
   );
 
   if (needingAttention.length > 0) {
-    const anyOverdue = needingAttention.some((r) => r.attention > r.soonCount);
+    const anyOverdue = needingAttention.some((r) => r.overdue.length > 0);
     root.append(
       el(
         'div',
@@ -591,27 +594,23 @@ function renderOverview(root, rerender) {
               // the text names the things themselves. It used to say
               // "compliance overdue" for anything that was not a late payment,
               // which became a lie the moment insurance could lapse too.
-              const overdueCount = row.attention - row.soonCount;
               const reasons = [
                 ...row.overdue.map((item) => item.label),
                 ...row.soon.map((item) => `${item.label} within ${DUE_SOON_DAYS} days`),
+                ...row.gaps.map((gap) => gap.label),
               ];
+              const worst =
+                row.overdue[0] ?? row.soon[0] ?? (row.gaps[0] && { kind: row.gaps[0].section });
+              const tone = row.overdue.length > 0 ? 'overdue' : row.soon.length > 0 ? 'soon' : 'gap';
 
               return el(
                 'li',
                 {},
-                el(
-                  'span',
-                  { class: `badge ${overdueCount > 0 ? 'badge-overdue' : 'badge-soon'}` },
-                  String(row.attention),
-                ),
+                el('span', { class: `badge badge-${tone}` }, String(row.attention)),
                 ' ',
                 el(
                   'button',
-                  {
-                    class: 'link',
-                    onclick: () => openProperty(row.property.id, panelFor(row.overdue[0] ?? row.soon[0])),
-                  },
+                  { class: 'link', onclick: () => openProperty(row.property.id, panelFor(worst)) },
                   row.property.name,
                 ),
                 ` — ${reasons.join(', ')}`,
@@ -701,7 +700,15 @@ function renderOverview(root, rerender) {
                 ? el('span', { class: 'unset' }, '—')
                 : el(
                     'span',
-                    { class: `badge ${row.attention > row.soonCount ? 'badge-overdue' : 'badge-soon'}` },
+                    {
+                      // The colour of the worst thing on the row: red for
+                      // something already past, amber for a warning, grey for
+                      // records that merely want filling in.
+                      class: `badge badge-${
+                        row.overdue.length > 0 ? 'overdue' : row.soon.length > 0 ? 'soon' : 'gap'
+                      }`,
+                      title: [...row.overdue, ...row.soon, ...row.gaps].map((i) => i.label).join('\n'),
+                    },
                     String(row.attention),
                   ),
             ),
@@ -1204,25 +1211,27 @@ function renderTransactionList(root, rerender, transactions, property) {
 }
 
 /**
- * One banner for everything wanting attention, in four grades.
+ * One banner for everything wanting attention, in five grades.
  *
  * Each grade is a different kind of fact and they are never mixed: "the gas
- * certificate lapsed three weeks ago" is not the same as "it runs out in
- * three weeks", which is not the same as "insurance renews in September",
- * which is not the same as "you have never told me who the tenant is". The
- * banner used to draw only the first two distinctions, so a certificate due in
- * a fortnight sat in the same list as one due in three months.
+ * certificate lapsed three weeks ago" is not the same as "it runs out in three
+ * weeks", which is not the same as "insurance renews in September", which is
+ * not the same as "your valuation is two years old", which is not the same as
+ * "you have never told me who the tenant is". The banner used to draw only the
+ * first two distinctions, so a certificate due in a fortnight sat in the same
+ * list as one due in three months.
  *
  * @param {ReturnType<import('../attention.js').attentionFor>} attention
  * @param {() => void} openDetails takes the reader to the records to fill in
+ * @param {(section: string) => void} openSection takes them to one of them
  */
-function renderComingUp(root, attention, today, openDetails) {
+function renderComingUp(root, attention, today, openDetails, openSection) {
   // Merged and sorted in attention.js, so this list and the badge on the tab
   // are the same list counted twice rather than two lists built twice.
-  const { overdue, soon, missing } = attention;
+  const { overdue, soon, gaps, missing } = attention;
   const upcoming = [...attention.upcoming].sort((a, b) => a.date.localeCompare(b.date));
 
-  if (overdue.length + soon.length + upcoming.length + missing.length === 0) return;
+  if (overdue.length + soon.length + gaps.length + upcoming.length + missing.length === 0) return;
 
   const group = (heading, ...children) =>
     el('div', { class: 'attention-group' }, el('strong', {}, heading), ...children);
@@ -1264,6 +1273,31 @@ function renderComingUp(root, attention, today, openDetails) {
                   {},
                   el('span', { class: 'badge badge-soon' }, 'Due soon'),
                   ` ${item.label} — ${ukDate(item.date)}, in ${daysBetween(today, item.date)} days`,
+                ),
+              ),
+            ),
+          )
+        : null,
+      // Records you have kept that do not say enough. Counted like a warning,
+      // because each one is cleared by entering a figure — and because a check
+      // only ever fires on a record you chose to keep in the first place.
+      gaps.length > 0
+        ? group(
+            'Records to check',
+            el(
+              'ul',
+              {},
+              ...gaps.map((gap) =>
+                el(
+                  'li',
+                  {},
+                  el('span', { class: 'badge badge-gap' }, 'Check'),
+                  ' ',
+                  el(
+                    'button',
+                    { class: 'link', onclick: () => openSection(gap.section) },
+                    gap.label,
+                  ),
                 ),
               ),
             ),

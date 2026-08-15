@@ -61,7 +61,11 @@ function tabBadge(routeId) {
   if (routeId === 'properties') {
     const attention = attentionTotal(state, new Date().toISOString().slice(0, 10));
     return attention > 0
-      ? { text: String(attention), title: `${attention} item(s) overdue or due within 30 days`, class: 'pill' }
+      ? {
+          text: String(attention),
+          title: `${attention} item(s) overdue, due within 30 days, or needing a record filled in`,
+          class: 'pill',
+        }
       : null;
   }
   if (routeId === 'backup') {

@@ -20,6 +20,27 @@
 export const RELEASES = [
   {
     date: '2026-08-15',
+    title: 'Records that don’t say enough',
+    points: [
+      'A new **Records to check** group flags a record you have kept that is incomplete or out of ' +
+        'date, and counts on the Properties tab like anything else with something to do about it.',
+      'A **valuation more than 12 months old** — it says how old, because every figure derived ' +
+        'from it is that old too.',
+      'A tenancy with **no deposit recorded**, or a deposit that is **not recorded as protected in ' +
+        'a scheme** — the costliest blank in the app, at one to three times the deposit.',
+      'A tenancy with no rent (nothing to spot a missed payment against) or no start date (nothing ' +
+        'to retire a former tenant’s rent by); a mortgage with no balance, or a valuation with no ' +
+        'figure, either of which stops LTV and equity being worked out; and insurance with no ' +
+        'renewal date, which is what expiry is tracked from.',
+      'Nothing else. A missing broker, county or policy number is nobody’s problem, and putting ' +
+        'every blank field on the list would bury the deposit that is not protected.',
+      'A check only ever fires on a record you chose to keep, so it is never unavoidable noise: no ' +
+        'valuation recorded means no stale-valuation warning, which is still the “Still to add” ' +
+        'prompt’s business.',
+    ],
+  },
+  {
+    date: '2026-08-15',
     title: 'Insurance that has run out now says so',
     points: [
       'A property whose insurance renewal date has passed shows **Insurance cover lapsed** in ' +

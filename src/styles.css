@@ -968,6 +968,17 @@ tr.row-overdue > td {
   letter-spacing: 0.02em;
 }
 
+/*
+ * A record that wants filling in. Outlined rather than filled, unlike Overdue
+ * and Due soon: nothing has gone wrong and nothing is about to, so it should
+ * not compete with the two that mean something is actually at stake.
+ */
+.badge-gap {
+  color: var(--muted);
+  border-color: var(--muted);
+  font-weight: 600;
+}
+
 /* A certificate this property does not need. Dimmed rather than hidden: the
    row is the record of the decision, and hiding it would make the tick box
    impossible to find again. */

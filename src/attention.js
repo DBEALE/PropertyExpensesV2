@@ -15,6 +15,10 @@
  *   - **soon** — a certificate or an insurance policy falling due inside 30
  *     days. Yellow: still time to book an engineer or ring a broker, but not
  *     much.
+ *   - **gaps** — a record you have kept that does not say enough: a valuation
+ *     a year old, a tenancy with no deposit. Counted, because every one is
+ *     cleared by entering the figure, and because a check only ever fires on a
+ *     record you chose to keep in the first place.
  *   - **missing** — a section with nothing recorded. A prompt, not a deadline,
  *     and deliberately *not* counted in the badge: a property whose insurance
  *     you have chosen not to record would otherwise carry a permanent number,
@@ -26,6 +30,7 @@ import { isOverdue, paymentStreams, sharesFor } from './accounts.js';
 import { upcomingCompliance } from './compliance.js';
 import { addMonths } from './dates.js';
 import { currentRecord, missingSections, upcomingDates } from './property-details.js';
+import { recordGaps } from './record-gaps.js';
 
 /**
  * When the current tenancy began — the tenant's own start date if recorded,
@@ -73,6 +78,7 @@ export function attentionFor(state, propertyId, today, horizonDays = 90) {
 
   const dated = upcomingDates(propertyDetails, propertyId, today, horizonDays);
   const missing = missingSections(propertyDetails, propertyId);
+  const gaps = recordGaps(propertyDetails, propertyId, today);
 
   const overdueCompliance = compliance.filter((c) => c.overdue);
   const soonCompliance = compliance.filter((c) => c.dueSoon);
@@ -113,15 +119,18 @@ export function attentionFor(state, propertyId, today, horizonDays = 90) {
       ...compliance.filter((c) => !c.overdue && !c.dueSoon),
       ...dated.filter((d) => !d.overdue && !d.dueSoon),
     ],
+    gaps,
     missing,
     overdueCount: overdue.length,
     soonCount: soon.length,
+    gapCount: gaps.length,
     /**
-     * The number on the badge. Deadlines only — see the note at the top of
-     * this file for why missing sections are left out of it.
+     * The number on the badge: everything with something to do about it. See
+     * the note at the top of this file for why missing sections are the one
+     * kind left out.
      */
     get count() {
-      return this.overdueCount + this.soonCount;
+      return this.overdueCount + this.soonCount + this.gapCount;
     },
   };
 }
