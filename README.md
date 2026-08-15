@@ -359,6 +359,13 @@ light-mode slots sit below 3:1 against the surface, so the name always travels w
 plain square reads as a bug rather than a choice. A stored icon that is no longer in the bank (an
 old backup, a changed set) falls back rather than rendering nothing.
 
+The **browser tab icon** is the same house, in the palette's red slot, at `favicon.svg`. It is a
+static file rather than something generated at runtime, because a bookmark, a history entry and a
+tab that has not finished loading all want an icon before any script runs — which does mean the path
+data lives in two places, so `tests/favicon.test.js` asserts the two still agree. The SVG carries
+its own `prefers-color-scheme` rule and switches between the red slot's light and dark steps:
+browser chrome is a surface like any other.
+
 **Category columns wear their mark in the heading** — on the Summary table and in a property's
 Monthly breakdown — so a column of figures is identifiable without reading, and matches the chart
 legend directly above the breakdown. The heading becomes an inline flex row rather than an inline
@@ -712,7 +719,7 @@ statement, and the shared-payee disambiguation including the unmatched-amount ca
 
 1. checks out the repo,
 2. runs the tests on Node 20 (a failure stops the deploy),
-3. copies `index.html`, `src/` and `.nojekyll` into `_site/`, leaving tests and docs out,
+3. copies `index.html`, `favicon.svg`, `src/` and `.nojekyll` into `_site/`, leaving tests and docs out,
 4. uploads that as a Pages artifact and deploys it.
 
 The published site is **https://dbeale.github.io/PropertyExpensesV2/**.
@@ -792,6 +799,7 @@ dating, ordering and shape; it cannot tell whether an entry is missing.
 
 ```
 index.html            page shell
+favicon.svg           browser tab icon: the house from the icon bank, in red
 src/
   main.js             hash router and layout
   csv.js              CSV parsing/export, UK date and amount handling

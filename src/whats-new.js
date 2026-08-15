@@ -19,6 +19,15 @@
 /** @type {Release[]} */
 export const RELEASES = [
   {
+    date: '2026-08-15',
+    title: 'The app has a face',
+    points: [
+      'A red house in the browser tab, drawn from the same icon bank the properties use. It takes ' +
+        'the light or dark step of the palette’s red depending on your browser’s theme, the same ' +
+        'way every other mark in the app does.',
+    ],
+  },
+  {
     date: '2026-08-13',
     title: 'Category marks on column headings, and a quieter Summary',
     points: [

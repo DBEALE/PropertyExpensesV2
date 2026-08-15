@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Property Expenses">
+  <!--
+    The tab icon: the same house from the app's own icon bank (src/icons.js),
+    in the red palette slot.
+
+    A static file rather than something generated at runtime, so it is there
+    for a bookmark, a history entry and a tab that has not finished loading —
+    all of which happen before any script runs. tests/favicon.test.js asserts
+    the path data still matches PROPERTY_ICONS, since the two now say the same
+    thing in two places and only a test will notice them drifting apart.
+
+    The two reds are the light and dark steps of the palette's red slot, picked
+    here the same way every other mark in the app picks them: browser chrome is
+    a surface like any other, and #e34948 muddies against a dark one.
+  -->
+  <style>
+    path { fill: #e34948; }
+    @media (prefers-color-scheme: dark) {
+      path { fill: #e66767; }
+    }
+  </style>
+  <path
+    fill-rule="evenodd"
+    d="M12 2.5 L22 11 H19.5 V21.5 H4.5 V11 H2 Z M10.25 14.5 H13.75 V21.5 H10.25 Z M6.5 12.8 H9 V15.3 H6.5 Z M15 12.8 H17.5 V15.3 H15 Z"
+  />
+</svg>
