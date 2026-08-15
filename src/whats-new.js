@@ -20,6 +20,29 @@
 export const RELEASES = [
   {
     date: '2026-08-15',
+    title: 'Use it on more than one device',
+    points: [
+      'Optional sync to a **private GitHub gist**, set up on the Backup tab and off until you ask ' +
+        'for it. Enter the same gist id and passphrase on a second device and both share one ' +
+        'dataset — laptop and phone at last.',
+      'Your data is compressed and **encrypted on the device** before it goes anywhere, with a ' +
+        'passphrase that is never uploaded. GitHub stores a blob nobody can read. A secret gist is ' +
+        'unlisted rather than private, so that encryption is doing real work.',
+      'When both devices have changed, the app **merges** rather than making you pick a loser. It ' +
+        'fetches the version you both started from and reconciles record by record, so a statement ' +
+        'imported on one and a note added on the other simply combine.',
+      'Where the same record really was edited in both places, the local copy is kept and named in ' +
+        'a report — and the other version stays in the gist’s history, because every push is a ' +
+        'commit.',
+      'A push is refused rather than allowed to overwrite work you have not seen. Opening the app ' +
+        'tells you when the gist has moved on, so you find out before editing on top of a stale ' +
+        'copy rather than afterwards.',
+      'The local JSON download is unchanged and still the escape hatch that needs no passphrase — ' +
+        'forget the passphrase and the gist copy cannot be recovered.',
+    ],
+  },
+  {
+    date: '2026-08-15',
     title: 'Records that don’t say enough',
     points: [
       'A new **Records to check** group flags a record you have kept that is incomplete or out of ' +

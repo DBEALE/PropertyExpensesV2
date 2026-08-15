@@ -6,8 +6,13 @@ A single-user, browser-only tool for categorising buy-to-let bank transactions, 
 Assessment property income reporting.
 
 Everything runs client-side. Statements are parsed in the browser, all data is stored in IndexedDB on
-your own machine, and nothing is ever sent over the network. There is no backend, no account, and no
-third-party service.
+your own machine, and there is no backend and no server to sign in to.
+
+**By default nothing is sent anywhere.** There is one exception, and it is opt-in and off until you
+set it up: [sync to a private gist](#sync-to-a-private-gist), which lets you use the app on more than
+one device. Even then your data is compressed and encrypted **on the device** before it is uploaded,
+with a passphrase that is never transmitted — so the only thing that leaves your machine is a blob
+nobody, GitHub included, can read.
 
 ## Features
 
@@ -44,6 +49,9 @@ third-party service.
   Config and used consistently on every screen.
 - **Change log** — the Backup tab lists what you have edited since your last download, cleared when
   you take a new one.
+- **Sync across devices** — optional, off by default. Pushes an encrypted copy to a private GitHub
+  gist so the laptop and the phone can share one dataset, and **three-way merges** when both have
+  moved on, so neither loses work.
 - **Summary** — totals per property and category, filterable by date range or UK tax year
   (6 April – 5 April), exportable to CSV, with an income tax estimate that handles the 20% finance
   cost credit.
@@ -831,6 +839,97 @@ describes the gap between backups, so a restore starts it empty.
 Logging failures are swallowed. Losing a log line is a much smaller problem than a save that appears
 to fail because its bookkeeping did.
 
+## Sync to a private gist
+
+Optional, and off until you set it up. It exists to solve two things the local-only design cannot:
+clearing site data wipes everything, and you cannot enter something on the laptop and see it on the
+phone.
+
+IndexedDB stays the source of truth. The gist is a copy that happens to be reachable from anywhere.
+
+### Setting it up
+
+Create a [personal access token](https://github.com/settings/tokens) with the `gist` scope, then on
+the Backup tab enter the token and a passphrase. Leave the gist id blank to create one; on your
+second device, paste **the same gist id and the same passphrase** and it pulls rather than pushes —
+otherwise a fresh install would overwrite the gist with nothing.
+
+Three things the UI says out loud, because they matter:
+
+- **A secret gist is unlisted, not private.** Anyone with the URL can fetch it. The encryption is not
+  decoration — it is the only thing making that safe.
+- **Lose the passphrase and the cloud copy is unrecoverable.** Nobody can reset it. Keep taking the
+  local JSON download, which is the escape hatch that depends on remembering nothing.
+- **A classic token with the `gist` scope reaches all your gists** — fine-grained tokens do not cover
+  gists at the time of writing. A leaked token means gist access, not readable data.
+
+### What is actually uploaded
+
+The same document the Download button produces, then `JSON → gzip → AES-256-GCM → base64`. The key
+comes from PBKDF2-SHA256 at 600,000 iterations with a fresh salt and IV **per push**, so two uploads
+of identical data look completely different — nobody watching the gist can tell whether anything
+changed.
+
+Compression comes first because ciphertext does not compress, and it earns its place: the Gist API
+truncates a file's `content` above 1MB and base64 inflates by a third, while gzip takes a couple of
+thousand transactions from megabytes to well under the limit. The read path still handles
+`truncated` by following `raw_url`, because "should fit" is not a thing to rely on for someone's
+only copy.
+
+The token and gist id live in `localStorage`, deliberately **not** in the `settings` store —
+`buildBackup` includes settings, so a token kept there would be uploaded and then restored onto the
+other device, handing it credentials it never asked for.
+
+### When two devices disagree
+
+This is the part worth understanding, because the obvious answers are both wrong. Say both devices
+pull v1, one pushes v2, and the other now wants to push:
+
+- **Overwrite** discards whatever the first device did.
+- **Pull first** discards whatever *this* device did — worse, because those edits exist nowhere else.
+
+So instead the app fetches the **common ancestor** from the gist's history (a gist is a git
+repository, which is what makes this possible at all) and performs a three-way merge. Every store is
+a flat set of `id`-keyed records, so it comes down to one decision per record:
+
+| Situation | Result |
+| --- | --- |
+| only on one side | keep it |
+| in the ancestor, deleted one side, untouched the other | accept the delete |
+| in the ancestor, deleted one side, **edited** the other | resurrect it, and say so |
+| changed on one side only | take that change |
+| changed on both, differently | **collision** — keep local, name it |
+
+Almost every real case is disjoint — January's statement imported on the laptop while a note is added
+on the phone — and merges silently. A collision needs the *same record* edited on both devices in
+the same window. There is no honest automatic winner for those (no record carries a universal
+"modified at", so "newest wins" cannot be determined), so the local copy is kept and named in the
+report. The other version is still in the gist's history.
+
+A merge can leave a dangling reference — you delete a property here while the other device adds a
+transaction against it. `validateBackup` would reject that, so the merge puts the parent back rather
+than dropping the new transactions.
+
+The merged result is applied locally and left **unpushed**, because it is now ahead of every copy
+that exists anywhere. Pushing it is a separate, deliberate press.
+
+### When it checks
+
+| Local edits | Gist moved | On open |
+| --- | --- | --- |
+| no | no | nothing |
+| no | yes | tells you newer data is available |
+| yes | no | nothing — the tab dot already says there is unpushed work |
+| yes | yes | tells you both have changed and to merge |
+
+The check is one cheap request for the head revision, made **after** the first paint — the app is
+local-first and never waits on the network. Nothing is written without a button press: no passphrase
+is held on a fresh page load, so nothing could decrypt unattended even if it wanted to.
+
+Conflict detection is read-compare-write, because `PATCH /gists` has no conditional write. That
+leaves a sub-second race, which is survivable precisely because every push is a commit: any
+overwritten revision stays retrievable from the gist's history.
+
 ## What's new
 
 `src/whats-new.js` is a list of releases — date, title, and the points worth telling a user about —
@@ -862,6 +961,10 @@ src/
   record-gaps.js      records kept but incomplete: stale valuation, unprotected deposit
   whats-new.js        the changelog the app shows about itself
   change-log.js       what has been edited since the last backup
+  vault.js            compress + encrypt the backup document for upload
+  merge.js            three-way merge of two devices against their ancestor
+  gist-store.js       the GitHub Gist API, over plain fetch
+  sync.js             push/pull/merge orchestration and the sync decisions
   focus.js            "take me to that row" hand-off between screens
   sort.js             click-to-sort column state and comparators
   responsive.js       card-mode cell labels and the mobile sort control

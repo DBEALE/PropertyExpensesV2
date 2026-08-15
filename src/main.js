@@ -3,6 +3,7 @@ import { attentionTotal } from './attention.js';
 import { clear, el, toast } from './dom.js';
 import { applyResponsive, watchBreakpoint } from './responsive.js';
 import { backupPending, getState, load, subscribe } from './store.js';
+import { checkRemote, isConfigured } from './sync.js';
 import { renderBackup } from './views/backup.js';
 import { renderImport } from './views/import.js';
 import { renderConfig } from './views/config.js';
@@ -148,8 +149,38 @@ watchBreakpoint(render);
 // Keep the tab badges honest after writes from any view.
 subscribe(() => renderNav(currentRoute()));
 
+/**
+ * Catches up with the gist when the app opens.
+ *
+ * Most sync conflicts are not two people typing at once — they are one device
+ * starting from a stale copy and only discovering it at push time, by which
+ * point both sides have diverged and something has to give. Asking on open is
+ * what turns that from a recurring problem into a rare one.
+ *
+ * Only the case with nothing to lose acts on its own: a fast-forward replaces
+ * local data, so it runs only when the local copy provably holds nothing
+ * unpushed. A real divergence puts a notice on the Backup tab and waits — the
+ * app does not rewrite your data because you opened it.
+ */
+async function catchUpWithRemote() {
+  if (!isConfigured()) return;
+  const state = await checkRemote();
+  if (state.offline || state.action === 'nothing') return;
+
+  if (state.action === 'fast-forward') {
+    // No passphrase is held on a fresh page load, so this cannot decrypt
+    // unattended — which is the honest outcome. Point at the tab that can.
+    toast('The gist has newer data. Open the Backup tab to pull it.');
+    return;
+  }
+  toast('This device and the gist have both changed. Open the Backup tab to merge.', 'error');
+}
+
 load()
   .then(render)
+  // After the first paint, never before it: the app is local-first and must
+  // not wait on a network call it is designed to work without.
+  .then(() => catchUpWithRemote().catch(() => {}))
   .catch((err) => {
     console.error(err);
     view.append(

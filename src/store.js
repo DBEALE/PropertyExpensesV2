@@ -518,9 +518,26 @@ export async function deleteTransaction(id) {
 
 // --- Backup -------------------------------------------------------------
 
-export async function restoreBackup(raw) {
+/**
+ * Replaces everything with a validated document.
+ *
+ * Validation happens before the write, so a damaged file cannot half-import —
+ * and it is the same check the merge output goes through, which is why this is
+ * shared rather than being a restore-only path.
+ *
+ * It deliberately does *not* mark the state as backed up. A restore from a file
+ * and a fast-forward from the cloud both are, but a **merge is not**: the merged
+ * state is ahead of every copy that exists anywhere, and telling the user
+ * otherwise would leave the only version of their reconciled data on one
+ * machine with nothing saying so. Callers say which case they are.
+ */
+export async function applyDocument(raw) {
   await db.replaceAll(validateBackup(raw));
   await load();
+}
+
+export async function restoreBackup(raw) {
+  await applyDocument(raw);
   // What was just restored *is* on disk somewhere — the file it came from — so
   // the freshly loaded state is not unbacked-up work.
   await markBackedUp();
@@ -601,4 +618,17 @@ export async function markBackedUp() {
 /** What has been edited since the last backup, newest first. */
 export function changesSinceBackup() {
   return newestFirst(state.changeLog);
+}
+
+/**
+ * Records an edit that did not come from one of the mutations above.
+ *
+ * Applying a merge replaces every store, which clears the change log with
+ * them — leaving the tab dot saying there is unpushed work while the list
+ * underneath says nothing has been edited. Sync uses this to put back the one
+ * line that explains the state the app is actually in.
+ */
+export async function recordChange(kind, summary) {
+  await log(kind, summary);
+  await load();
 }
