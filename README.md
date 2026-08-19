@@ -230,6 +230,22 @@ Under the banner is a strip of five panels — **Monthly breakdown**, **Recurrin
 **Compliance**, **Transactions**, **Overview** — of which exactly one is open at a time, its content
 filling the page below.
 
+Each panel also carries a **count of what is outstanding behind it**, so a lapsed certificate is
+visible without opening Compliance to go and find it. The three grades match the banner: red for
+something overdue, amber for something due within 30 days, outlined grey for a record that wants
+filling in. Hovering names the things themselves — the number says how many but never which.
+
+| Panel | What counts against it |
+| --- | --- |
+| Overview | dated records (insurance, mortgage, tenancy) and incomplete records — the panel they all live behind |
+| Recurring payments | payments that have not arrived |
+| Compliance | certificates overdue or due soon |
+
+It is the same tally the Properties tab shows, so the number on a panel, the number on the tab and
+the list in the banner are one count displayed three times. Missing whole sections are left out for
+the same reason they are left out of the tab badge: a prompt with no deadline should not put a
+number on anything.
+
 Each panel carries a line of **summary under its title**, and that is the point of them. The page
 used to run all five sections down the screen, which meant the compliance table sat three scrolls
 below the banner telling you to look at it. Now the strip is a set of *answers* rather than a set of

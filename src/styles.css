@@ -1160,8 +1160,27 @@ td.due-soon {
   cursor: default;
 }
 
+/*
+ * The title row, and the count of what is outstanding behind that panel.
+ *
+ * The badge is pushed to the far edge rather than sitting beside the words, so
+ * the counts line up down the right of the strip and read as a column instead
+ * of having to be hunted for at five different positions.
+ */
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
 .panel-title {
   font-weight: 600;
+}
+
+.panel-head .badge {
+  margin-left: auto;
+  flex: none;
 }
 
 .panel.selected .panel-title {

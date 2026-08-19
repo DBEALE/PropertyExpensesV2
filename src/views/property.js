@@ -237,7 +237,7 @@ export function renderProperty(root, rerender, propertyId) {
   });
 
   const body = el('div', { class: 'panel-body', id: 'panel-body', role: 'tabpanel' });
-  root.append(renderPanelChooser(summaries, rerender), body);
+  root.append(renderPanelChooser(summaries, panelAttention(attention), rerender), body);
 
   if (openPanel === 'breakdown') renderMonthlyBreakdown(body, shares, categories, rerender);
   else if (openPanel === 'recurring') renderRecurring(body, streams, today, streamOptions);
@@ -273,13 +273,41 @@ function renderDetailSections(root, property, propertyDetails, rerender) {
 }
 
 /**
+ * A panel's title, with a count of what is outstanding behind it.
+ *
+ * The badge sits at the far end rather than beside the words, so the counts
+ * line up down the right of the strip and can be read as a column instead of
+ * hunted for at five different x positions.
+ */
+function panelHead(panel, flag) {
+  return el(
+    'span',
+    { class: 'panel-head' },
+    el('span', { class: 'panel-title' }, panel.label),
+    flag
+      ? el(
+          'span',
+          {
+            class: `badge badge-${flag.tone}`,
+            // The names themselves on hover; the number alone says how many
+            // but never which.
+            title: flag.title,
+            'aria-label': `${flag.count} needing attention`,
+          },
+          String(flag.count),
+        )
+      : null,
+  );
+}
+
+/**
  * The row of panels, and the click that swaps which one is open.
  *
  * Each is a real button with `role="tab"`: arrow keys move between them and the
  * open one is the only one in the tab order, which is what a keyboard user
  * expects of a strip of choices where exactly one applies.
  */
-function renderPanelChooser(summaries, rerender) {
+function renderPanelChooser(summaries, flags, rerender) {
   const open = (key) => {
     openPanel = key;
     // A re-render replaces these buttons, so the one that was clicked takes
@@ -311,7 +339,7 @@ function renderPanelChooser(summaries, rerender) {
           open(PANELS[(at + step + PANELS.length) % PANELS.length].key);
         },
       },
-      el('span', { class: 'panel-title' }, panel.label),
+      panelHead(panel, flags[panel.key]),
       el('span', { class: 'panel-summary' }, summaries[panel.key]),
     );
   });
@@ -323,6 +351,48 @@ function renderPanelChooser(summaries, rerender) {
   }
 
   return el('div', { class: 'panels', role: 'tablist', 'aria-label': 'Property sections' }, ...buttons);
+}
+
+/**
+ * Which panel each outstanding thing belongs to.
+ *
+ * The strip already says what is *inside* each panel; this says which of them
+ * wants something doing, so a lapsed certificate is visible without opening
+ * Compliance to find it. Every dated record — insurance, mortgage, tenancy —
+ * lives behind Overview, which is why those land there rather than on a panel
+ * of their own.
+ *
+ * Counted exactly as the tab badge counts, so the number on a panel, the
+ * number on the tab and the list in the banner are one tally shown three
+ * times. Missing sections are left out here for the same reason they are left
+ * out there: a prompt with no deadline should not put a number on anything.
+ *
+ * @param {ReturnType<import('../attention.js').attentionFor>} attention
+ * @returns {Record<string, {count: number, tone: string, title: string}>}
+ */
+function panelAttention(attention) {
+  const bucket = (label, overdue, soon, gaps) => {
+    const count = overdue.length + soon.length + gaps.length;
+    if (count === 0) return null;
+    return {
+      count,
+      // The colour of the worst thing in there, matching the banner below.
+      tone: overdue.length > 0 ? 'overdue' : soon.length > 0 ? 'soon' : 'gap',
+      title: [...overdue, ...soon, ...gaps].map((item) => item.label).join('\n'),
+      label,
+    };
+  };
+
+  return {
+    details: bucket('Overview', attention.overdueDates, attention.soonDates, attention.gaps),
+    recurring: bucket('Recurring payments', attention.lateStreams.map(streamItem), [], []),
+    compliance: bucket('Compliance', attention.overdueCompliance, attention.soonCompliance, []),
+  };
+}
+
+/** A late payment in the shape the tooltip above expects. */
+function streamItem(stream) {
+  return { label: `${stream.label} not received` };
 }
 
 /**

@@ -19,6 +19,21 @@
 /** @type {Release[]} */
 export const RELEASES = [
   {
+    date: '2026-08-19',
+    title: 'The panels say which one needs you',
+    points: [
+      'Each panel on a property page now carries a count of what is outstanding behind it, so a ' +
+        'lapsed certificate is visible without opening Compliance to go and find it. Red for ' +
+        'something overdue, amber for something due within 30 days, outlined grey for a record ' +
+        'that wants filling in — the same three grades the banner uses.',
+      'Hovering a count names the things themselves; the number alone says how many but never which.',
+      'Dated records — insurance, mortgage, tenancy — count against **Overview**, because that ' +
+        'is the panel they live behind.',
+      'Counted exactly as the Properties tab counts, so the number on a panel, the number on the ' +
+        'tab and the list in the banner are one tally shown three times.',
+    ],
+  },
+  {
     date: '2026-08-15',
     title: 'Use it on more than one device',
     points: [
