@@ -88,25 +88,22 @@ describe('currentRecord', () => {
 describe('supersede', () => {
   const existing = [record('tenancy', '2025-06-01', { tenantName: 'S Agyapong', rentAmount: '1100' })];
 
-  it('keeps the old record and closes it off on the new effective date', () => {
-    const { record: next, superseded } = supersede({
-      records: existing,
-      propertyId: 'p1',
-      section: 'tenancy',
-      data: { tenantName: 'S Agyapong', rentAmount: '1150' },
-      effectiveFrom: '2026-06-01',
-      recordedAt: '2026-05-20T10:00:00.000Z',
-      id: 'new-1',
-    });
+  const file = (records, effectiveFrom, data, recordedAt = '2026-05-20T10:00:00.000Z') =>
+    supersede({ records, propertyId: 'p1', section: 'tenancy', data, effectiveFrom, recordedAt, id: 'new-1' });
 
-    assert.equal(superseded.supersededOn, '2026-06-01');
-    assert.equal(superseded.data.rentAmount, '1100', 'the old figures are untouched');
+  it('keeps the old record and closes it off on the new effective date', () => {
+    const { record: next, rewritten, inForce } = file(existing, '2026-06-01', { rentAmount: '1150' });
+
+    assert.equal(rewritten.length, 1);
+    assert.equal(rewritten[0].supersededOn, '2026-06-01');
+    assert.equal(rewritten[0].data.rentAmount, '1100', 'the old figures are untouched');
     assert.equal(next.supersededOn, null);
     assert.equal(next.data.rentAmount, '1150');
+    assert.equal(inForce, true);
   });
 
-  it('has nothing to supersede the first time a section is filled in', () => {
-    const { superseded } = supersede({
+  it('has nothing to rewrite the first time a section is filled in', () => {
+    const { rewritten, inForce } = supersede({
       records: [],
       propertyId: 'p1',
       section: 'address',
@@ -115,10 +112,11 @@ describe('supersede', () => {
       recordedAt: '2026-01-01T00:00:00.000Z',
       id: 'a1',
     });
-    assert.equal(superseded, null);
+    assert.deepEqual(rewritten, []);
+    assert.equal(inForce, true);
   });
 
-  it('copies the data rather than aliasing the caller\'s object', () => {
+  it("copies the data rather than aliasing the caller's object", () => {
     const data = { lender: 'NatWest' };
     const { record: next } = supersede({
       records: [],
@@ -131,6 +129,95 @@ describe('supersede', () => {
     });
     data.lender = 'Changed after the fact';
     assert.equal(next.data.lender, 'NatWest');
+  });
+
+  it('files a backdated record behind the one in force, without disturbing it', () => {
+    // The case the old "cannot start before" restriction refused: entering a
+    // record you only found out about after a later one was already saved.
+    const { record: next, rewritten, inForce } = file(existing, '2024-01-01', { rentAmount: '900' });
+
+    assert.equal(inForce, false, 'an older record does not become the current one');
+    assert.equal(next.supersededOn, '2025-06-01', 'it hands over to the record that follows it');
+    assert.deepEqual(rewritten, [], 'the record in force is left completely alone');
+  });
+
+  it('never marks the record in force as superseded by an older one', () => {
+    // Exactly what the previous implementation did once backdating was allowed:
+    // it paired the new record with whatever was current, whichever way round
+    // the dates ran.
+    const { rewritten } = file(existing, '2024-01-01', { rentAmount: '900' });
+    for (const entry of rewritten) {
+      assert.ok(
+        entry.supersededOn === null || entry.supersededOn > entry.effectiveFrom,
+        `${entry.id} would hand over on ${entry.supersededOn}, before it even began`,
+      );
+    }
+  });
+
+  it('rewires both neighbours when a record lands in the middle', () => {
+    const timeline = [
+      record('tenancy', '2024-01-01', { rentAmount: '900' }),
+      record('tenancy', '2026-01-01', { rentAmount: '1200' }),
+    ];
+    const { record: next, rewritten } = file(timeline, '2025-01-01', { rentAmount: '1050' });
+
+    assert.equal(next.supersededOn, '2026-01-01', 'hands over to the one after it');
+    const earlier = rewritten.find((r) => r.effectiveFrom === '2024-01-01');
+    assert.equal(earlier.supersededOn, '2025-01-01', 'the one before now hands over to it');
+    assert.ok(!rewritten.some((r) => r.effectiveFrom === '2026-01-01'), 'the later one is untouched');
+  });
+
+  it('rewrites only the neighbours, not the whole timeline', () => {
+    // A section with years of history should not rewrite every row to add one.
+    // The fixture is already consistent — each record hands over to the next —
+    // so only the record the new one displaces has anything to change.
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      ...record('tenancy', `202${i}-01-01`, { rentAmount: `${i}` }),
+      supersededOn: i < 5 ? `202${i + 1}-01-01` : null,
+    }));
+    const { rewritten } = file(many, '2026-06-01', { rentAmount: 'new' });
+    assert.equal(rewritten.length, 1, `rewrote ${rewritten.length} records to append one`);
+    assert.equal(rewritten[0].effectiveFrom, '2025-01-01', 'only the record it follows');
+  });
+
+  it('repairs a timeline that was already inconsistent', () => {
+    // Records written by the previous implementation could carry a hand-over
+    // date that predates the record itself. Recomputing the whole run means
+    // saving anything into that section quietly puts the dates back in order.
+    const broken = [
+      { ...record('tenancy', '2024-01-01', { rentAmount: 'a' }), supersededOn: null },
+      { ...record('tenancy', '2025-01-01', { rentAmount: 'b' }), supersededOn: '2020-01-01' },
+    ];
+    const { rewritten } = file(broken, '2026-01-01', { rentAmount: 'c' });
+    const byStart = Object.fromEntries(rewritten.map((r) => [r.effectiveFrom, r.supersededOn]));
+    assert.equal(byStart['2024-01-01'], '2025-01-01');
+    assert.equal(byStart['2025-01-01'], '2026-01-01', 'the nonsense date is corrected');
+  });
+
+  it('leaves a consistent timeline whatever order records are entered in', () => {
+    // Enter three records back to front; every hand-over must still line up
+    // with the next record's start, and only the last may be open-ended.
+    let records = [];
+    for (const [effectiveFrom, rent] of [['2026-01-01', 'c'], ['2024-01-01', 'a'], ['2025-01-01', 'b']]) {
+      const result = supersede({
+        records,
+        propertyId: 'p1',
+        section: 'tenancy',
+        data: { rentAmount: rent },
+        effectiveFrom,
+        recordedAt: `2026-07-0${records.length + 1}T00:00:00.000Z`,
+        id: rent,
+      });
+      const changed = new Map(result.rewritten.map((r) => [r.id, r]));
+      records = [...records.map((r) => changed.get(r.id) ?? r), result.record];
+    }
+
+    const timeline = [...records].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+    assert.deepEqual(timeline.map((r) => r.data.rentAmount), ['a', 'b', 'c']);
+    assert.equal(timeline[0].supersededOn, '2025-01-01');
+    assert.equal(timeline[1].supersededOn, '2026-01-01');
+    assert.equal(timeline[2].supersededOn, null, 'only the last is still in force');
+    assert.equal(currentRecord(records, 'p1', 'tenancy').data.rentAmount, 'c');
   });
 });
 

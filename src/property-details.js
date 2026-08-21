@@ -180,13 +180,26 @@ function byEffectiveThenRecorded(a, b) {
 }
 
 /**
- * Builds the new record for a section and returns it along with the previous
- * one, updated to close off on the day the new one takes effect.
+ * Files a new record into a section's timeline.
  *
- * @returns {{record: object, superseded: object|null}}
+ * Records are not a stack where the newest wins — they are a *timeline*, and a
+ * record can legitimately be filed anywhere in it. A valuation from last March
+ * that you are only entering now belongs in March, behind the one that
+ * replaced it. So this does not ask "what is current"; it rebuilds the run of
+ * dates and works out afresh which record hands over to which.
+ *
+ * Each record is in force from its own `effectiveFrom` until the next one
+ * begins, so `supersededOn` is simply the following record's start date, and
+ * null for whichever ends up last. Getting there by recomputation rather than
+ * by pairing the new record with the old current one is what makes backdating
+ * safe: the old approach would stamp a record that is still in force as having
+ * been superseded by one that predates it.
+ *
+ * @returns {{record: object, rewritten: object[], inForce: boolean}} the new
+ *   record, any existing ones whose hand-over date moved, and whether the new
+ *   one is the version now in force
  */
 export function supersede({ records, propertyId, section, data, effectiveFrom, recordedAt, id }) {
-  const previous = currentRecord(records, propertyId, section);
   const record = {
     id,
     propertyId,
@@ -196,8 +209,25 @@ export function supersede({ records, propertyId, section, data, effectiveFrom, r
     supersededOn: null,
     data: { ...data },
   };
-  const superseded = previous ? { ...previous, supersededOn: effectiveFrom } : null;
-  return { record, superseded };
+
+  const timeline = [
+    ...records.filter((r) => r.propertyId === propertyId && r.section === section),
+    record,
+  ].sort(byEffectiveThenRecorded);
+
+  const rewritten = [];
+  timeline.forEach((entry, i) => {
+    const handsOverOn = timeline[i + 1]?.effectiveFrom ?? null;
+    if (entry === record) {
+      record.supersededOn = handsOverOn;
+    } else if (entry.supersededOn !== handsOverOn) {
+      // Only the neighbours of the insertion point actually move, so a section
+      // with years of history rewrites one row rather than all of them.
+      rewritten.push({ ...entry, supersededOn: handsOverOn });
+    }
+  });
+
+  return { record, rewritten, inForce: timeline.at(-1) === record };
 }
 
 /** True when a record has been replaced by a later one. */

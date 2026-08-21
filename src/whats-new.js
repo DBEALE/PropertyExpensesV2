@@ -19,6 +19,36 @@
 /** @type {Release[]} */
 export const RELEASES = [
   {
+    date: '2026-08-21',
+    title: 'Attention counts stop overstating themselves',
+    points: [
+      'A property with one lapsed certificate and three records wanting a figure typed in showed a ' +
+        'single red **4** on the Properties overview — which reads as four overdue things. The ' +
+        'colour belonged to one of them and the number to all four.',
+      'Each grade now gets its own badge: a red **1** beside a grey **3**. They still add up to the ' +
+        'number on the tab, and hovering either one names exactly which records it means.',
+      'The same split applies to the panel counts on a property page, so the two screens agree ' +
+        'about how urgent a property is rather than one of them shouting.',
+    ],
+  },
+  {
+    date: '2026-08-20',
+    title: 'Records can be dated whenever they actually applied',
+    points: [
+      'A property record can now be filed **behind ones already saved**. A valuation from 2023 that ' +
+        'you are only entering now belongs in 2023, and the app used to refuse it with "a ' +
+        'replacement cannot start before it".',
+      'Saving rebuilds that section’s run of dates rather than pairing the new record with ' +
+        'whatever happened to be current, so each version hands over exactly when the next one ' +
+        'begins — however out of order you entered them.',
+      'Backdating leaves the version in force alone, so the section on screen does not change. The ' +
+        'confirmation says so plainly — "filed under 01/05/2023, behind the version in force" — ' +
+        'rather than "updated", which would look like nothing had happened.',
+      'A section whose dates were left inconsistent by an older version gets them put back in order ' +
+        'the next time you save into it.',
+    ],
+  },
+  {
     date: '2026-08-19',
     title: 'The panels say which one needs you',
     points: [

@@ -241,7 +241,12 @@ filling in. Hovering names the things themselves — the number says how many bu
 | Recurring payments | payments that have not arrived |
 | Compliance | certificates overdue or due soon |
 
-It is the same tally the Properties tab shows, so the number on a panel, the number on the tab and
+**Each grade gets its own badge rather than one total wearing the colour of its worst member.** A
+property with one lapsed certificate and three records to check shows a red **1** beside a grey
+**3**, not a red **4** — which would read as four overdue things, the colour belonging to one of
+them and the number to all four. The separate counts still sum to the number on the tab.
+
+It is the same tally the Properties tab shows, so the numbers on a panel, the number on the tab and
 the list in the banner are one count displayed three times. Missing whole sections are left out for
 the same reason they are left out of the tab badge: a prompt with no deadline should not put a
 number on anything.
@@ -358,8 +363,21 @@ new version takes effect; the previous version is stamped with that date and kep
 under *Previous versions*. So the rent that was £1,100 until June 2026 and £1,150 after it is still
 answerable next January, which is what a tax return actually asks.
 
-Records are per-section, so changing the mortgage doesn't touch the tenancy history. A replacement
-can't be dated before the version it replaces.
+Records are per-section, so changing the mortgage doesn't touch the tenancy history.
+
+**A record can be filed anywhere in the timeline, including behind ones already saved.** A valuation
+from 2023 that you are only entering now belongs in 2023, and the app used to refuse it outright.
+Saving does not pair the new record with whatever happens to be current — it rebuilds the run of
+dates for that section and works out afresh which record hands over to which, so `supersededOn` is
+always simply the following record's start date, and null for whichever ends up last.
+
+That distinction matters: the naive approach would stamp a record that is *still in force* as having
+been superseded by one that predates it. Recomputing also means a section written by an older
+version quietly gets its dates put back in order the next time you save into it.
+
+Backdating does not change what the section shows, because a later record is still the one in force
+— so the confirmation says "filed under 01/05/2023, behind the version in force" rather than
+"updated", which would look like nothing had happened.
 
 ### No passwords
 

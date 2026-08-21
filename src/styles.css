@@ -1178,9 +1178,26 @@ td.due-soon {
   font-weight: 600;
 }
 
-.panel-head .badge {
+/*
+ * Several badges together — one per grade. They keep to one line so a row in
+ * a table does not grow a second one just to carry two small numbers.
+ */
+.badge-group {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.panel-head .badge:first-of-type {
   margin-left: auto;
+}
+
+.panel-head .badge {
   flex: none;
+}
+
+.panel-head .badge + .badge {
+  margin-left: -4px;
 }
 
 .panel.selected .panel-title {

@@ -284,19 +284,9 @@ function panelHead(panel, flag) {
     'span',
     { class: 'panel-head' },
     el('span', { class: 'panel-title' }, panel.label),
-    flag
-      ? el(
-          'span',
-          {
-            class: `badge badge-${flag.tone}`,
-            // The names themselves on hover; the number alone says how many
-            // but never which.
-            title: flag.title,
-            'aria-label': `${flag.count} needing attention`,
-          },
-          String(flag.count),
-        )
-      : null,
+    // Spread, not appended conditionally: an empty array adds nothing, where a
+    // bare null would print the word "null".
+    ...(flag ? attentionBadges(flag) : []),
   );
 }
 
@@ -371,22 +361,13 @@ function renderPanelChooser(summaries, flags, rerender) {
  * @returns {Record<string, {count: number, tone: string, title: string}>}
  */
 function panelAttention(attention) {
-  const bucket = (label, overdue, soon, gaps) => {
-    const count = overdue.length + soon.length + gaps.length;
-    if (count === 0) return null;
-    return {
-      count,
-      // The colour of the worst thing in there, matching the banner below.
-      tone: overdue.length > 0 ? 'overdue' : soon.length > 0 ? 'soon' : 'gap',
-      title: [...overdue, ...soon, ...gaps].map((item) => item.label).join('\n'),
-      label,
-    };
-  };
+  const bucket = (overdue, soon, gaps) =>
+    overdue.length + soon.length + gaps.length > 0 ? { overdue, soon, gaps } : null;
 
   return {
-    details: bucket('Overview', attention.overdueDates, attention.soonDates, attention.gaps),
-    recurring: bucket('Recurring payments', attention.lateStreams.map(streamItem), [], []),
-    compliance: bucket('Compliance', attention.overdueCompliance, attention.soonCompliance, []),
+    details: bucket(attention.overdueDates, attention.soonDates, attention.gaps),
+    recurring: bucket(attention.lateStreams.map(streamItem), [], []),
+    compliance: bucket(attention.overdueCompliance, attention.soonCompliance, []),
   };
 }
 
@@ -671,12 +652,10 @@ function renderOverview(root, rerender) {
               ];
               const worst =
                 row.overdue[0] ?? row.soon[0] ?? (row.gaps[0] && { kind: row.gaps[0].section });
-              const tone = row.overdue.length > 0 ? 'overdue' : row.soon.length > 0 ? 'soon' : 'gap';
-
               return el(
                 'li',
                 {},
-                el('span', { class: `badge badge-${tone}` }, String(row.attention)),
+                ...attentionBadges(row),
                 ' ',
                 el(
                   'button',
@@ -768,19 +747,9 @@ function renderOverview(root, rerender) {
               { class: 'num' },
               row.attention === 0
                 ? el('span', { class: 'unset' }, '—')
-                : el(
-                    'span',
-                    {
-                      // The colour of the worst thing on the row: red for
-                      // something already past, amber for a warning, grey for
-                      // records that merely want filling in.
-                      class: `badge badge-${
-                        row.overdue.length > 0 ? 'overdue' : row.soon.length > 0 ? 'soon' : 'gap'
-                      }`,
-                      title: [...row.overdue, ...row.soon, ...row.gaps].map((i) => i.label).join('\n'),
-                    },
-                    String(row.attention),
-                  ),
+                : // One badge per kind rather than a total wearing the colour
+                  // of its worst member — see attentionBadges.
+                  el('span', { class: 'badge-group' }, ...attentionBadges(row)),
             ),
             el(
               'td',
@@ -860,6 +829,44 @@ function dueCell(date, today, missing = '—') {
         ? el('span', { class: 'badge badge-soon' }, 'Due soon')
         : null;
   return el('td', { class: state }, ukDate(date), badge);
+}
+
+/**
+ * How much of each kind a property or panel is carrying, as separate badges.
+ *
+ * One badge showing the total, coloured by the worst thing in it, is a lie by
+ * arithmetic: a property with one lapsed certificate and three records wanting
+ * a figure typed in showed a red "4", which reads as four overdue things. The
+ * colour belonged to one of them and the number to all four.
+ *
+ * So each grade gets its own badge and its own count. Three small numbers that
+ * add up to the total beat one number misrepresenting three quarters of
+ * itself, and the tab badge still shows the sum.
+ *
+ * @param {{overdue: object[], soon: object[], gaps: object[]}} counts
+ * @returns {Node[]} to spread into a cell, a list item or a panel head
+ */
+function attentionBadges({ overdue = [], soon = [], gaps = [] }) {
+  const badge = (tone, items, noun) =>
+    items.length === 0
+      ? null
+      : el(
+          'span',
+          {
+            class: `badge badge-${tone}`,
+            // The names themselves on hover, so a number never has to be
+            // taken on trust.
+            title: items.map((item) => item.label).join('\n'),
+            'aria-label': `${items.length} ${noun}`,
+          },
+          String(items.length),
+        );
+
+  return [
+    badge('overdue', overdue, 'overdue'),
+    badge('soon', soon, `due within ${DUE_SOON_DAYS} days`),
+    badge('gap', gaps, 'to check'),
+  ].filter(Boolean);
 }
 
 /**
@@ -1974,13 +1981,6 @@ function sectionForm(section, property, current, rerender) {
           toast('Choose the date this takes effect.', 'error');
           return;
         }
-        if (current && effectiveFrom.value < current.effectiveFrom) {
-          toast(
-            `The current record starts ${ukDate(current.effectiveFrom)} — a replacement cannot start before it.`,
-            'error',
-          );
-          return;
-        }
         const data = {};
         for (const [key, input] of inputs) {
           // A ticked box is an answer: "owned outright, no other details" has
@@ -1996,9 +1996,17 @@ function sectionForm(section, property, current, rerender) {
           section: section.key,
           data,
           effectiveFrom: effectiveFrom.value,
-        }).then(() => {
+        }).then(({ inForce }) => {
           editing = null;
-          toast(current ? `${section.label} updated — the old version is kept.` : `${section.label} saved.`);
+          // A backdated record does not change what the section shows, so
+          // saying "updated" would look like nothing happened.
+          toast(
+            inForce
+              ? current
+                ? `${section.label} updated — the old version is kept.`
+                : `${section.label} saved.`
+              : `${section.label} filed under ${ukDate(effectiveFrom.value)}, behind the version in force.`,
+          );
           rerender();
         });
       },

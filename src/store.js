@@ -318,7 +318,7 @@ function unassign(transaction) {
  * readable rather than being overwritten.
  */
 export async function savePropertyDetail({ propertyId, section, data, effectiveFrom }) {
-  const { record, superseded } = supersede({
+  const { record, rewritten, inForce } = supersede({
     records: state.propertyDetails,
     propertyId,
     section,
@@ -327,14 +327,18 @@ export async function savePropertyDetail({ propertyId, section, data, effectiveF
     recordedAt: new Date().toISOString(),
     id: db.newId(),
   });
-  const writes = superseded ? [superseded, record] : [record];
-  await db.putMany('propertyDetails', writes);
+  await db.putMany('propertyDetails', [...rewritten, record]);
   await log(
     'details',
-    `${superseded ? 'Updated' : 'Recorded'} ${sectionLabel(section)} for ${propertyName(propertyId)}` +
-      (superseded ? ' — the previous version was kept' : ''),
+    inForce
+      ? `${rewritten.length > 0 ? 'Updated' : 'Recorded'} ${sectionLabel(section)} for ${propertyName(propertyId)}` +
+          (rewritten.length > 0 ? ' — the previous version was kept' : '')
+      : // Filed behind a later record: worth saying plainly, because the
+        // section on screen will not change and that looks like a failed save.
+        `Backdated ${sectionLabel(section)} for ${propertyName(propertyId)} to ${effectiveFrom} — the version in force is unchanged`,
   );
   await load();
+  return { inForce };
 }
 
 /** Deletes one historical record — for a mistake, not for tidying up. */
